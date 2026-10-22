@@ -8,6 +8,8 @@ import {
 } from '../src/verify-model';
 import { exampleResult } from './browser/app/fixture';
 import { verificationStatus } from '../src/report';
+import { reportFromError } from '../src/sdk';
+import { withVerificationTimeout } from '../src/timeout';
 
 jest.mock('@nearai/inference-sdk', () => ({
   verifyGatewayAttestation: jest.fn(),
@@ -77,6 +79,103 @@ test('times out unavailable replica evidence while retaining completed Gateway v
       code: 'verification.timeout',
       message: 'Verification timed out. Try again.',
     });
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test.each([
+  [0, false],
+  [1, false],
+  [0, true],
+  [1, true],
+] as const)(
+  'preserves settled replicas with failure at index %s and an outer timeout: %s',
+  async (failedIndex, outerTimeout) => {
+    jest.useFakeTimers();
+    try {
+      const input = options();
+      jest.mocked(input.client.fetchModelAttestations).mockResolvedValue({
+        attestations: [
+          raw,
+          { ...raw, intelQuote: '01' },
+          { ...raw, intelQuote: '02' },
+        ],
+        clientBinding: binding,
+      });
+      let finish: (value: typeof exampleResult.attestation) => void = () => {};
+      verifyModel.mockImplementation(({ attestation }) => {
+        if (attestation.intelQuote === (failedIndex === 0 ? '00' : '01')) {
+          return Promise.reject({
+            failure: { code: 'binding.nonce_mismatch' },
+          });
+        }
+        if (attestation.intelQuote === '02')
+          return Promise.resolve(exampleResult.attestation);
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      });
+      const getReports = () =>
+        verifyModelReports({
+          ...input,
+          verificationTimeoutMs: 100,
+        });
+      const pending = outerTimeout
+        ? withVerificationTimeout(getReports, 100).catch((error) => [
+            reportFromError(error, { kind: 'model', model: input.model }),
+          ])
+        : getReports();
+      await jest.advanceTimersByTimeAsync(100);
+      const reports = await pending;
+      expect(reports.map((report) => report.status)).toEqual([
+        'partial',
+        failedIndex === 0 ? 'failed' : 'unverifiable',
+        failedIndex === 1 ? 'failed' : 'unverifiable',
+        'verified',
+      ]);
+      expect(reports[failedIndex + 1].error?.code).toBe(
+        'binding.nonce_mismatch',
+      );
+      expect(reports[2 - failedIndex].error?.code).toBe('verification.timeout');
+      expect(verificationStatus(reports)).toBe('failed');
+      const snapshot = structuredClone(reports);
+      finish(exampleResult.attestation);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(reports).toEqual(snapshot);
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  },
+);
+
+test('shares one deadline across metadata, evidence fetching and replica verification', async () => {
+  jest.useFakeTimers();
+  try {
+    const input = options();
+    jest
+      .mocked(input.client.fetchModelMetadata)
+      .mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 60));
+        return { providerType: 'vllm', attestationSupported: true };
+      });
+    jest
+      .mocked(input.client.fetchModelAttestations)
+      .mockImplementation(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return { attestations: [raw], clientBinding: binding };
+      });
+    verifyModel.mockImplementation(() => new Promise(() => {}));
+    const pending = verifyModelReports({
+      ...input,
+      verificationTimeoutMs: 100,
+    });
+    await jest.advanceTimersByTimeAsync(100);
+    const reports = await pending;
+    expect(verifyModel).toHaveBeenCalledTimes(1);
+    expect(reports[1].error?.code).toBe('verification.timeout');
     expect(jest.getTimerCount()).toBe(0);
   } finally {
     jest.useRealTimers();

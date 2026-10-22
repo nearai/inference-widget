@@ -103,6 +103,8 @@ parent helper and `verifyModelReports()` accept `verificationTimeoutMs`,
 defaulting to 60,000 ms. A verification timeout ends the wait and ignores late
 results; it does not necessarily cancel the SDK's underlying work. Widget and
 model-helper timeouts produce an unverifiable `verification.timeout` report.
+The model helper shares one deadline across all steps, retaining completed
+replica results so a timeout cannot replace a known verification failure.
 
 Retry with the viewer's Verify again control, or `reload()` after a parent
 connection error. Reload changes the request ID and resends buffered reports

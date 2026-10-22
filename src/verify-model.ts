@@ -10,7 +10,7 @@ import { reportFromAttestation, reportFromError } from './sdk';
 import { parseVerificationReports, type VerificationReport } from './report';
 import {
   DEFAULT_VERIFICATION_TIMEOUT_MS,
-  withVerificationTimeout,
+  VerificationTimeoutError,
 } from './timeout';
 
 export type VerifyModelReportsOptions = {
@@ -36,18 +36,31 @@ export async function verifyModelReports({
   if (!model.trim()) throw new TypeError('A model ID is required.');
   if (!Number.isFinite(verificationTimeoutMs) || verificationTimeoutMs <= 0)
     throw new TypeError('verificationTimeoutMs must be positive.');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new VerificationTimeoutError()),
+      verificationTimeoutMs,
+    );
+  });
+  const beforeDeadline = <T>(run: () => Promise<T>): Promise<T> =>
+    Promise.race([run(), expired]);
   const failure = (error: unknown, scope: 'gateway' | 'model') => ({
     ...reportFromError(error, { kind: 'model', model }),
     scope,
   });
   const gateway = async (): Promise<VerificationReport> => {
     try {
-      const fetched = await client.fetchGatewayAttestation({ signingAlgo });
-      const attestation = await verifyGatewayAttestation({
-        ...fetched,
-        policy: gatewayVerification?.policy,
-        verifiers: gatewayVerification?.verifiers,
-      });
+      const fetched = await beforeDeadline(() =>
+        client.fetchGatewayAttestation({ signingAlgo }),
+      );
+      const attestation = await beforeDeadline(() =>
+        verifyGatewayAttestation({
+          ...fetched,
+          policy: gatewayVerification?.policy,
+          verifiers: gatewayVerification?.verifiers,
+        }),
+      );
       return reportFromAttestation({
         model,
         attestation,
@@ -59,7 +72,9 @@ export async function verifyModelReports({
   };
   const replicas = async (): Promise<VerificationReport[]> => {
     try {
-      const metadata = await client.fetchModelMetadata(model);
+      const metadata = await beforeDeadline(() =>
+        client.fetchModelMetadata(model),
+      );
       if (metadata.providerType !== 'vllm' || !metadata.attestationSupported) {
         return [
           {
@@ -75,26 +90,30 @@ export async function verifyModelReports({
           },
         ];
       }
-      const fetched = await client.fetchModelAttestations({
-        model,
-        signingAlgo,
-      });
+      const fetched = await beforeDeadline(() =>
+        client.fetchModelAttestations({
+          model,
+          signingAlgo,
+        }),
+      );
       if (!fetched.attestations.length) {
         throw new Error('No model evidence was returned.');
       }
       return Promise.all(
         fetched.attestations.map(async (evidence) => {
           try {
-            const attestation = await verifyModelAttestation({
-              attestation: evidence,
-              clientBinding: fetched.clientBinding,
-              policy: {
-                ...modelVerification?.policy,
-                gpuEvidence:
-                  modelVerification?.policy?.gpuEvidence ?? 'required',
-              },
-              verifiers: modelVerification?.verifiers,
-            });
+            const attestation = await beforeDeadline(() =>
+              verifyModelAttestation({
+                attestation: evidence,
+                clientBinding: fetched.clientBinding,
+                policy: {
+                  ...modelVerification?.policy,
+                  gpuEvidence:
+                    modelVerification?.policy?.gpuEvidence ?? 'required',
+                },
+                verifiers: modelVerification?.verifiers,
+              }),
+            );
             return reportFromAttestation({ model, attestation, evidence });
           } catch (error) {
             return failure(error, 'model');
@@ -105,13 +124,13 @@ export async function verifyModelReports({
       return [failure(error, 'model')];
     }
   };
-  const [gatewayReport, modelReports] = await Promise.all([
-    withVerificationTimeout(gateway, verificationTimeoutMs).catch((error) =>
-      failure(error, 'gateway'),
-    ),
-    withVerificationTimeout(replicas, verificationTimeoutMs).catch((error) => [
-      failure(error, 'model'),
-    ]),
-  ]);
-  return parseVerificationReports([gatewayReport, ...modelReports]);
+  try {
+    const [gatewayReport, modelReports] = await Promise.all([
+      gateway(),
+      replicas(),
+    ]);
+    return parseVerificationReports([gatewayReport, ...modelReports]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
