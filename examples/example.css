@@ -1,0 +1,104 @@
+.example-page {
+  margin: 0;
+  color: var(--nearai-foreground);
+  background: var(--nearai-background);
+  font: 14px / 1.6 var(--nearai-font-family);
+}
+.example-main {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+.example-main > :where(h1, p),
+.example-section > :where(h2, p),
+.example-config > p {
+  margin: 0 0 12px;
+}
+.example-main > h1 {
+  font-size: 26px;
+  font-weight: 600;
+}
+.example-main > p,
+.example-section > p,
+.example-config p {
+  color: var(--nearai-muted-foreground);
+}
+.example-config,
+.example-section {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid var(--nearai-border);
+  border-radius: 10px;
+}
+.example-config label,
+.example-section label {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+  font-weight: 500;
+}
+.example-config input,
+.example-section textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--nearai-border);
+  border-radius: 6px;
+  color: inherit;
+  background: inherit;
+  font: inherit;
+}
+.example-config input:focus-visible,
+.example-section textarea:focus-visible {
+  outline: 2px solid var(--nearai-ring);
+  outline-offset: 2px;
+}
+.example-config-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+.example-config > p {
+  margin-top: 12px;
+  margin-bottom: 0;
+  font-size: 12px;
+}
+.example-section > h2 {
+  font-size: 18px;
+  font-weight: 600;
+}
+.example-section > h3 {
+  margin: 24px 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.example-section > [role="status"] {
+  margin: 16px 0 0;
+}
+.example-section > pre {
+  padding: 16px;
+  border-radius: 6px;
+  background: var(--nearai-muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.example-main > p:last-child {
+  margin-top: 24px;
+  font-size: 12px;
+}
+.example-frame {
+  box-sizing: border-box;
+  width: 100%;
+  height: 720px;
+  margin-top: 16px;
+  border: 1px solid var(--nearai-border);
+  border-radius: 10px;
+}
+@media (max-width: 480px) {
+  .example-main {
+    padding: 24px 16px;
+  }
+  .example-config,
+  .example-section {
+    padding: 16px;
+  }
+}
