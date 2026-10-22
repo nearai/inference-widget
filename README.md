@@ -95,7 +95,7 @@ inspectable report, so this callback supplies the report details.
 The application owns the iframe's size and placement.
 
 ```html
-<iframe id="verification-frame" title="Verification reports"
+<iframe id="verification-frame" title="Verification reports" allow="clipboard-write"
   style="width: 420px; height: 100vh; border: none;"></iframe>
 ```
 
@@ -118,6 +118,7 @@ for the initial data.
 Use `onStateChange(state, message)` for loading, refreshing, ready and error
 feedback. `onReports(reports)` observes results returned by `getReports`.
 The parent keeps the SDK client and credentials; the iframe receives reports.
+`allow="clipboard-write"` enables copying report details from a cross-origin viewer.
 
 `verifyUrl` must point to a deployed viewer implementing this package's
 [frame protocol](docs/protocol.md), with an explicit parent-origin allowlist and

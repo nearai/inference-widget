@@ -133,7 +133,8 @@ requests, as shown in `examples/verify-page.ts`.
 
 ## A caller-owned iframe
 
-For an inline panel or an existing React modal, render your own `<iframe ref={host} />`
+For an inline panel or an existing React modal, render your own
+`<iframe ref={host} allow="clipboard-write" />`
 and use `createVerificationFrame()` instead of `createVerificationWidget()` in
 the same two-effect pattern. It accepts `iframe: host.current`, `verifyUrl`,
 `theme` and an optional stable `getReports` callback. Update it with

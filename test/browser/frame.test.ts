@@ -10,6 +10,22 @@ test.beforeEach(async ({ page }) => {
   ).toHaveText('Reply verified');
 });
 
+test('copies report details from a cross-origin viewer', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const copy = page
+    .frameLocator('#viewer')
+    .getByRole('button', { name: 'Copy Signing address', exact: true })
+    .first();
+  await copy.click();
+  await expect(copy).toHaveText('Copied');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    '11'.repeat(32),
+  );
+});
+
 test('embeds across origins without a dialog and requests updated reports from the host', async ({
   page,
 }) => {
