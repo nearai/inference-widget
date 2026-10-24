@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" class="nearai-verification-theme">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NEAR AI verification examples</title>
+  </head>
+  <body class="example-page">
+    <main class="example-main">
+      <h1>Verification examples</h1>
+      <p>Real SDK verification with the widget's packaged report views, buttons and dialog.</p>
+      <form id="configuration" class="example-config">
+        <label>API base URL<input name="baseUrl" type="url" placeholder="https://cloud-api.near.ai/v1/" required /></label>
+        <label>API key<input name="apiKey" type="password" required autocomplete="off" placeholder="Enter your API key" /></label>
+        <label>Model<input name="model" required placeholder="Enter a model ID" /></label>
+        <div class="example-config-actions">
+          <button type="reset" class="nearai-verification-button nearai-verification-button-secondary">Clear configuration</button>
+        </div>
+        <p id="configuration-storage-status">Configuration, including the API key, is saved for this tab. Changing it clears previous results.</p>
+      </form>
+      <section class="example-section">
+        <h2>1. Verification components</h2>
+        <h3>Model verification page</h3>
+        <p>Verify the Gateway and every available model replica, then display their reports inline. Click the result button below to open the same reports in an iframe.</p>
+        <form id="verify-page-form">
+          <button id="verify-environment" class="nearai-verification-button" type="submit">Verify environment</button>
+        </form>
+        <p id="verify-page-status" role="status" aria-live="polite"></p>
+        <div id="model-reports"></div>
+        <div id="model-verification"></div>
+        <h3>Reply verification button</h3>
+        <p>Send a real inference request, then use the same SDK client to verify the reply. Sending a request may incur API usage charges.</p>
+        <form id="reply-form">
+          <label>Prompt<textarea name="prompt" required rows="2">Reply with a short greeting.</textarea></label>
+          <button id="send-request" class="nearai-verification-button" type="submit">Send request</button>
+        </form>
+        <p id="reply-status" role="status" aria-live="polite"></p>
+        <pre id="reply-text" hidden></pre>
+        <div id="reply-verification"></div>
+      </section>
+      <section class="example-section">
+        <h2>2. Iframe embedding</h2>
+        <p>Embed the report viewer in your own page. The parent verifies evidence with the SDK and sends the reports to the iframe. Verify again requests fresh reports.</p>
+        <form id="iframe-form">
+          <button id="verify-iframe" class="nearai-verification-button" type="submit">Verify in iframe</button>
+        </form>
+        <p id="iframe-status" role="status" aria-live="polite"></p>
+        <iframe id="example-iframe" class="example-frame" title="Embedded verification reports" referrerpolicy="no-referrer" allow="clipboard-write" hidden></iframe>
+      </section>
+      <p>Inline, dialog and direct iframe reports use the widget's packaged report component. The viewer performs no additional verification.</p>
+    </main>
+    <script type="module" src="/main.ts"></script>
+  </body>
+</html>

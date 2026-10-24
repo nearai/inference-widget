@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head><meta charset="UTF-8" /><title>Direct frame test harness</title></head>
+  <body>
+    <p id="frame-state" role="status"></p>
+    <p id="frame-error"></p>
+    <output id="refresh-count">0</output>
+    <iframe id="viewer" title="Verification viewer" allow="clipboard-write" style="width: 100%; height: 700px; border: none;"></iframe>
+    <button id="finish">Finish refresh</button>
+    <button id="reject">Reject refresh</button>
+    <button id="replace">Replace report</button>
+    <button id="clear">Clear reports</button>
+    <button id="reload">Reload frame</button>
+    <button id="destroy">Destroy connection</button>
+    <script type="module" src="./frame.ts"></script>
+  </body>
+</html>

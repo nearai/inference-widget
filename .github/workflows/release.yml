@@ -1,0 +1,130 @@
+name: Publish package
+run-name: Publish ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version in package.json, without a v prefix
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-npm
+  cancel-in-progress: false
+
+jobs:
+  validate-release:
+    if: github.repository == 'nearai/inference-widget'
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      npm-tag: ${{ steps.version.outputs.npm-tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+      - name: Validate branch and version
+        id: version
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const version = process.env.RELEASE_VERSION;
+          const manifest = JSON.parse(readFileSync('package.json', 'utf8'));
+          const number = '(?:0|[1-9][0-9]*)';
+          const identifier = '(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)';
+          const match = new RegExp(`^${number}\\.${number}\\.${number}(?:-(${identifier}(?:\\.${identifier})*))?$`).exec(version);
+          if (process.env.GITHUB_REF !== `refs/heads/${process.env.DEFAULT_BRANCH}`) throw new Error('Run this workflow from the default branch.');
+          if (version !== manifest.version || !match) throw new Error('The release version must match package.json and use SemVer.');
+          const prerelease = Boolean(match[1]);
+          appendFileSync(process.env.GITHUB_OUTPUT, `prerelease=${prerelease}\nnpm-tag=${prerelease ? 'next' : 'latest'}\n`);
+          JS
+
+  checks:
+    needs: validate-release
+    uses: ./.github/workflows/ci.yml
+
+  create-release:
+    needs: [validate-release, checks]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - name: Create tag and draft release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+          PRERELEASE: ${{ needs.validate-release.outputs.prerelease }}
+        run: |
+          RELEASE_TAG="v$RELEASE_VERSION"
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$GITHUB_SHA"
+          else
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$GITHUB_SHA" >/dev/null
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
+          else
+            gh release create "$RELEASE_TAG" --draft --generate-notes \
+              --title "$RELEASE_TAG" --verify-tag --prerelease="$PRERELEASE"
+          fi
+
+  publish-npm:
+    needs: [validate-release, create-release]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      NPM_TAG: ${{ needs.validate-release.outputs.npm-tag }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 11.24.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: pnpm install --frozen-lockfile
+      - name: Publish npm package
+        run: |
+          export RELEASE_TAG="v$RELEASE_VERSION"
+          source .github/scripts/release.sh
+          verify_npm_channel
+          verify_release_tag
+          npm publish --access public --tag "$NPM_TAG"
+
+  publish-release:
+    needs: publish-npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Publish GitHub release
+        env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          export RELEASE_TAG="v$RELEASE_VERSION"
+          source .github/scripts/release.sh
+          verify_release_tag
+          gh release edit "$RELEASE_TAG" --draft=false
