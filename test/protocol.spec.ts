@@ -40,3 +40,10 @@ test('recognizes a request for reports from the viewer', () => {
     isVerificationMessage({ ...ready, type: 'nearai:request-reports' }),
   ).toBe(true);
 });
+
+test('recognizes a close request from the viewer', () => {
+  expect(isVerificationMessage({ ...ready, type: 'nearai:close' })).toBe(true);
+  expect(
+    isVerificationMessage({ ...ready, type: 'nearai:close', requestId: '' }),
+  ).toBe(false);
+});

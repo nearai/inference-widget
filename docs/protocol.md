@@ -2,15 +2,6 @@
 
 The parent and viewer use `postMessage` with protocol version `1`.
 
-Cloud UI's `/verify` iframe mode accepts this protocol when the widget supplies
-`parentOrigin`, `instanceId` and `requestId` in its URL. It supports single
-reports, replica collections, empty collections, `canRequestReports` and `theme`.
-The public Cloud UI viewer accepts HTTPS and loopback development parents under
-its framing policy, and pins the exact parent origin and both routing IDs.
-These checks identify the sender; they do not prove the parent ran the SDK.
-Cloud UI also retains its older `NEAR_AI_*` document protocol for bare iframe
-URLs; it is selected only when no widget routing parameters are present.
-
 ## Viewer integration
 
 ```ts
@@ -42,6 +33,7 @@ Every message contains `protocolVersion: 1`, `instanceId` and `requestId`.
 | --- | --- | --- |
 | `nearai:ready` | Viewer to parent | None |
 | `nearai:request-reports` | Viewer to parent | None |
+| `nearai:close` | Viewer to parent | None |
 | `nearai:report` | Parent to viewer | `report` |
 | `nearai:reports` | Parent to viewer | `reports` |
 | `nearai:error` | Viewer to parent | `message` |
@@ -49,6 +41,17 @@ Every message contains `protocolVersion: 1`, `instanceId` and `requestId`.
 The widget adds `parentOrigin`, `instanceId`, `requestId` and `theme` to the
 viewer URL query. `canRequestReports` tells the viewer whether the host provides
 a refresh callback. These are routing and presentation values, not credentials.
+`canClose` is true when the parent provides an `onClose` handler. With this flag,
+`connectVerificationFrame()` relays an unhandled Escape key from the viewer as
+`nearai:close`. Native modal dialogs and dismissible popovers inside the viewer
+handle Escape first, including a dialog's own cancel handler. The parent accepts
+close messages only after readiness and with the same origin, window, version
+and routing checks as other messages. The widget closes its dialog and restores
+focus; a caller-owned iframe
+opts in by passing `onClose`.
+Destroying the viewer connection also removes its keyboard listener. This is an
+optional addition to version 1; older viewers continue to use the parent close
+button.
 Both sides check the exact origin, sender window, protocol version and IDs.
 Messages from other instances or old requests are ignored.
 `isVerificationMessage()` checks the envelope only; always use

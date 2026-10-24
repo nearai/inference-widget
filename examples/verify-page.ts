@@ -33,7 +33,11 @@ export function setupVerifyPage() {
   clear();
   configuration.addEventListener('input', clear);
   configuration.addEventListener('reset', clear);
-  window.addEventListener('pagehide', () => {
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) {
+      clear();
+      return;
+    }
     revision += 1;
     view.destroy();
     widget?.destroy();

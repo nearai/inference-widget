@@ -19,6 +19,7 @@ export type VerificationFrameOptions = {
   reports?: readonly VerificationReport[];
   getReports?: () => Promise<readonly VerificationReport[]>;
   onReports?: (reports: VerificationReport[]) => void;
+  onClose?: () => void;
   onStateChange?: (state: VerificationFrameState, message?: string) => void;
   loadTimeoutMs?: number;
   verificationTimeoutMs?: number;
@@ -173,6 +174,8 @@ export function createVerificationFrame(
     } else if (message.type === 'nearai:request-reports' && ready) {
       if (options.getReports) void refresh();
       else send();
+    } else if (message.type === 'nearai:close' && ready) {
+      options.onClose?.();
     } else if (message.type === 'nearai:error') {
       fail(
         'The verification page could not display this report. Check its protocol compatibility.',
@@ -193,6 +196,7 @@ export function createVerificationFrame(
     source.searchParams.set('instanceId', instanceId);
     source.searchParams.set('requestId', requestId);
     source.searchParams.set('theme', options.theme ?? 'light');
+    source.searchParams.set('canClose', String(Boolean(options.onClose)));
     source.searchParams.set(
       'canRequestReports',
       String(Boolean(options.getReports)),

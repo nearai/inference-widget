@@ -243,10 +243,11 @@ export function createVerificationReportView(
         if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           payload = parsed as Record<string, unknown>;
           if (Array.isArray(payload.evidence_list))
-            evidenceList = JSON.stringify(payload.evidence_list, null, 2);
+            // Indentation can expand a small, deeply nested payload quadratically.
+            evidenceList = JSON.stringify(payload.evidence_list);
         }
       } catch {
-        // Keep the raw payload available if decoding or pretty-printing fails.
+        // Keep the raw payload available if decoding or serialization fails.
       }
       copyValue(
         gpu,

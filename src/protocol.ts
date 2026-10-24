@@ -17,6 +17,7 @@ export type VerificationMessage = {
 } & (
   | { type: 'nearai:ready' }
   | { type: 'nearai:request-reports' }
+  | { type: 'nearai:close' }
   | { type: 'nearai:report'; report: unknown }
   | { type: 'nearai:reports'; reports: unknown }
   | { type: 'nearai:error'; message: string }
@@ -37,6 +38,7 @@ export function isVerificationMessage(
     message.requestId.length <= 128 &&
     (message.type === 'nearai:ready' ||
       message.type === 'nearai:request-reports' ||
+      message.type === 'nearai:close' ||
       (message.type === 'nearai:report' && 'report' in message) ||
       (message.type === 'nearai:reports' && Array.isArray(message.reports)) ||
       (message.type === 'nearai:error' &&
@@ -77,6 +79,7 @@ export function connectVerificationFrame(options: {
     message:
       | { type: 'nearai:ready' }
       | { type: 'nearai:request-reports' }
+      | { type: 'nearai:close' }
       | { type: 'nearai:error'; message: string },
   ) => {
     window.parent.postMessage(
@@ -112,7 +115,29 @@ export function connectVerificationFrame(options: {
       });
     }
   };
+  const handlesNativeEscape = (target: EventTarget) =>
+    target instanceof Element &&
+    (target.matches('dialog:modal') ||
+      (target instanceof HTMLElement &&
+        typeof target.hidePopover === 'function' &&
+        target.popover !== 'manual' &&
+        target.matches(':popover-open')));
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (
+      event.key !== 'Escape' ||
+      event.defaultPrevented ||
+      Array.from(document.querySelectorAll('dialog[open], [popover]')).some(
+        handlesNativeEscape,
+      ) ||
+      event.composedPath().some(handlesNativeEscape)
+    )
+      return;
+    event.preventDefault();
+    send({ type: 'nearai:close' });
+  };
   window.addEventListener('message', receive);
+  if (params.get('canClose') === 'true')
+    window.addEventListener('keydown', onKeyDown);
   send({ type: 'nearai:ready' });
   let destroyed = false;
   return {
@@ -127,6 +152,7 @@ export function connectVerificationFrame(options: {
       if (destroyed) return;
       destroyed = true;
       window.removeEventListener('message', receive);
+      window.removeEventListener('keydown', onKeyDown);
     },
   };
 }

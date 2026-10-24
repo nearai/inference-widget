@@ -6,6 +6,29 @@ import {
 } from '@nearai/inference-widget';
 import { configuration, element, readConfiguration, verifyUrl } from './config';
 
+async function verifyEnvironment(client: InferenceClient, model: string) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      client.verify(model),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              Object.assign(new Error('Verification timed out.'), {
+                failure: { code: 'verification.timeout' },
+                retryable: true,
+              }),
+            ),
+          60_000,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function setupReply() {
   const form = element<HTMLFormElement>('reply-form');
   const button = element<HTMLButtonElement>('send-request');
@@ -45,7 +68,7 @@ export function setupReply() {
         modelVerification: { verifiers },
         gatewayVerification: { verifiers },
       });
-      await client.verify(model);
+      await verifyEnvironment(client, model);
       if (current !== revision) return;
       status.textContent = 'Sending request...';
       const completion = await client.chat.completions.create({

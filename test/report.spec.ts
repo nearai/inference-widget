@@ -226,6 +226,7 @@ test.each(['é', '"', '\n'])(
 test.each([
   'gpu.nras_request_failed',
   'gpu.jwks_request_failed',
+  'provenance.image_request_failed',
   'policy.model_attestation_required',
   'binding.spki_fingerprint_required',
   'policy.gpu_evidence_required',
@@ -243,6 +244,24 @@ test.each([
     expect(report.error?.code).toBe(code);
     expect(report.error?.message).not.toContain('SDK rejected');
     expect(verificationStatus([exampleReport, report])).toBe('unverifiable');
+  },
+);
+
+test.each(['signature.invalid', 'provenance.image_verification_failed'])(
+  'keeps genuine rejection %s failed even with an unavailable cause',
+  (code) => {
+    const report = reportFromError(
+      {
+        failure: { code },
+        retryable: false,
+        cause: {
+          failure: { code: 'api.http_status', details: { status: 403 } },
+        },
+      },
+      { kind: 'model', model: 'demo-model' },
+    );
+    expect(report.status).toBe('failed');
+    expect(verificationStatus([exampleReport, report])).toBe('failed');
   },
 );
 

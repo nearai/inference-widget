@@ -5,8 +5,7 @@
     "src/**/*.ts",
     "test/**/*.ts",
     "examples/**/*.ts",
-    "playwright.config.ts",
-    "playwright.cloud-ui.config.ts"
+    "playwright.config.ts"
   ],
   "exclude": ["dist"]
 }

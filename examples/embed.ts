@@ -23,7 +23,8 @@ try {
     allowedParentOrigins: [window.location.origin, 'http://127.0.0.1:4173'],
     onReports: (reports) => view.setReports(reports),
   });
-  window.addEventListener('pagehide', () => {
+  window.addEventListener('pagehide', (event) => {
+    if (event.persisted) return;
     connection.destroy();
     view.destroy();
   });

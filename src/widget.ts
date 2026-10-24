@@ -217,6 +217,8 @@ export function createVerificationWidget(
     releaseSession();
     version += 1;
     verification?.abort();
+    if (button?.dataset.status === 'pending')
+      renderButton(cachedReports ? verificationStatus(cachedReports) : 'idle');
     title.textContent =
       target.kind === 'reply'
         ? 'Response verification'
@@ -260,6 +262,7 @@ export function createVerificationWidget(
       theme: options.theme,
       loadTimeoutMs: timeout,
       verificationTimeoutMs: verificationTimeout,
+      onClose: close,
       getReports: refreshTarget
         ? async () => {
             const currentVersion = ++version;

@@ -29,7 +29,11 @@ test('production examples initialize model, reply and iframe integrations', asyn
       .frameLocator('.nearai-verification-frame')
       .locator('[data-field="status"]'),
   ).toHaveText('Unable to verify');
-  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page
+    .frameLocator('.nearai-verification-frame')
+    .getByRole('tab', { name: 'Model Verification', exact: true })
+    .press('Escape');
+  await expect(page.locator('.nearai-verification-frame')).toHaveCount(0);
   await page.getByRole('button', { name: 'Send request', exact: true }).click();
   await expect(page.locator('#reply-status')).toContainText('HTTP 401');
   await page.getByRole('button', { name: 'Verify in iframe' }).click();

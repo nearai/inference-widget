@@ -137,6 +137,7 @@ export function reportFromError(
     !code ||
     code === 'verification.timeout' ||
     gpuHttpError ||
+    code === 'provenance.image_request_failed' ||
     code === 'policy.model_attestation_required' ||
     code === 'binding.spki_fingerprint_required' ||
     code === 'policy.gpu_evidence_required' ||

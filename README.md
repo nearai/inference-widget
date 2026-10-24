@@ -29,13 +29,12 @@ The button verifies the reply when clicked and opens its report in an iframe
 dialog. Pass `theme: 'dark'` for dark mode.
 `verifyUrl` must point to a deployed [report viewer](#embed-your-own-iframe).
 The package does not provide a hosted viewer URL.
-Cloud UI's `/verify` iframe mode supports this widget protocol. Point `verifyUrl`
-to your trusted Cloud UI deployment after deploying its widget integration;
-the standalone route being reachable alone does not confirm protocol support.
 
 SDK reply records can expire. An unknown completion remains unverifiable;
 model verification is never used as a substitute for reply verification.
 Call `widget.destroy()` when its host is removed.
+The button stays bound to its configured target. Opening another target cancels
+the previous verification and clears its pending button state.
 
 The SDK is a peer dependency and is not bundled. Imports are safe in SSR;
 create UI instances in the browser. Browser usage requires Web Crypto,
@@ -207,14 +206,6 @@ pnpm test:browser
 pnpm dev
 ```
 
-To test the real Cloud UI viewer across origins, check out `nearai-cloud-ui`
-alongside this repository and install its dependencies, then run
-`pnpm test:cloud-ui`. Set `CLOUD_UI_ROOT` for another checkout location. The test
-starts the application on port 3011 and exercises `/verify` with this widget;
-SDK results are fixtures and no inference requests or API keys are used.
-To test a production build instead, build Cloud UI first and set
-`CLOUD_UI_SERVER_COMMAND='node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3011'`.
-
 To build both example pages, run `pnpm build:examples`, then
 `pnpm preview:examples`. Deploy `examples/dist` with an explicit parent-origin
 allowlist and framing headers for `embed.html`. The development API proxies
@@ -238,6 +229,9 @@ from the package, with no example-only overrides.
 
 The example saves API URL, API key and model in `sessionStorage` for the current
 tab. **Clear configuration** removes that entry and old results.
+The reply example limits its environment verification preflight to 60 seconds.
+On timeout it sends no inference request and allows retry. Underlying SDK work
+may still finish later; its result does not resume the timed-out submission.
 
 Development proxies target fixed Cloud API, PCCS and NRAS services. They are
 not included in the npm package; production hosts supply their own trusted
