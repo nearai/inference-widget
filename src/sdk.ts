@@ -136,6 +136,10 @@ export function reportFromError(
   const unavailable =
     !code ||
     code === 'verification.timeout' ||
+    gpuHttpError ||
+    code === 'policy.model_attestation_required' ||
+    code === 'binding.spki_fingerprint_required' ||
+    code === 'policy.gpu_evidence_required' ||
     retryable ||
     (code.startsWith('api.') && code !== 'api.nonce_mismatch') ||
     code.endsWith('_unavailable') ||

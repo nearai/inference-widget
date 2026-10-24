@@ -54,6 +54,33 @@ test('a partial model report does not claim Gateway verification', async ({
   );
 });
 
+for (const kind of ['nested', 'malformed']) {
+  test(`keeps a ${kind} GPU payload inspectable without losing the report`, async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    await page
+      .getByRole('button', { name: `Set ${kind} GPU payload`, exact: true })
+      .click();
+    const report = page.locator('#report .nearai-verification-report');
+    await expect(report.locator('[data-field="status"]')).toHaveText(
+      'Reply verified',
+    );
+    await report.getByText('GPU Attestation', { exact: true }).click();
+    await expect(
+      report.getByText('Raw NVIDIA payload', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      report.getByRole('button', {
+        name: 'Copy Raw NVIDIA payload',
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+}
+
 test('replaces reports, clears obsolete evidence and rejects invalid updates without stale success', async ({
   page,
 }) => {

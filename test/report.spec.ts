@@ -128,6 +128,124 @@ test('bounds the serialized UTF-8 report size', () => {
   ).toThrow('exceeds 1 MiB');
 });
 
+test.each(['x', 'é', '"', '\n', '\ud800'])(
+  'stops reading advisory strings after exceeding the byte budget with %j',
+  (character) => {
+    const advisoryIds = Array(1000).fill(
+      character.repeat(MAX_REPORT_BYTES / 4),
+    );
+    const readLater = jest.fn(() => 'later');
+    Object.defineProperty(advisoryIds, 4, { get: readLater });
+    expect(() =>
+      parseVerificationReport({
+        ...exampleReport,
+        attestation: { ...exampleResult.attestation, advisoryIds },
+      }),
+    ).toThrow(RangeError);
+    expect(readLater).not.toHaveBeenCalled();
+  },
+);
+
+test('shares the early string budget across supported report fields', () => {
+  const readLater = jest.fn(() => '[]');
+  expect(() =>
+    parseVerificationReport({
+      ...exampleReport,
+      evidence: {
+        intelQuote: 'x'.repeat(MAX_REPORT_BYTES / 2),
+        nonce: 'x'.repeat(MAX_REPORT_BYTES / 2),
+        get eventLog() {
+          return readLater();
+        },
+      },
+    }),
+  ).toThrow(RangeError);
+  expect(readLater).not.toHaveBeenCalled();
+});
+
+test('retains valid advisories and ignores oversized unsupported fields', () => {
+  const advisoryIds = Array(1000).fill('INTEL-SA-example');
+  expect(
+    parseVerificationReport({
+      ...exampleReport,
+      unsupported: 'x'.repeat(MAX_REPORT_BYTES + 1),
+      attestation: { ...exampleResult.attestation, advisoryIds },
+    }).attestation?.advisoryIds,
+  ).toEqual(advisoryIds);
+});
+
+test.each(['é', '"', '\n', '\ud800'])(
+  'preserves the exact serialized report and collection boundaries with %j',
+  (character) => {
+    const report = reportFromError(new Error(), {
+      kind: 'model',
+      model: 'demo-model',
+    });
+    report.error = { message: 'x' };
+    const encode = (value: unknown) =>
+      new TextEncoder().encode(JSON.stringify(value)).length;
+    const available = MAX_REPORT_BYTES - (encode(report) - 1);
+    const width = encode(character) - 2;
+    const repeats = Math.floor((available - 8) / width);
+    report.error.message =
+      character.repeat(repeats) + 'x'.repeat(available - repeats * width);
+    expect(encode(report)).toBe(MAX_REPORT_BYTES);
+    expect(parseVerificationReport(report)).toEqual(report);
+    report.error.message += 'x';
+    expect(() => parseVerificationReport(report)).toThrow(RangeError);
+    report.error.message = report.error.message.slice(0, -3);
+    expect(encode([report])).toBe(MAX_REPORT_BYTES);
+    expect(parseVerificationReports([report])).toEqual([report]);
+    report.error.message += 'x';
+    expect(() => parseVerificationReports([report])).toThrow('reports exceed');
+  },
+);
+
+test.each(['é', '"', '\n'])(
+  'stops reading later reports after the aggregate budget is exceeded with %j',
+  (character) => {
+    const report = {
+      schemaVersion: 1,
+      kind: 'model',
+      model: 'demo-model',
+      scope: 'unknown',
+      status: 'unverifiable',
+      error: { message: character.repeat(MAX_REPORT_BYTES / 4) },
+    };
+    const readLater = jest.fn(() => 1);
+    const later = Object.defineProperty({}, 'schemaVersion', {
+      get: readLater,
+    });
+    expect(() => parseVerificationReports([report, report, later])).toThrow(
+      RangeError,
+    );
+    expect(readLater).not.toHaveBeenCalled();
+  },
+);
+
+test.each([
+  'gpu.nras_request_failed',
+  'gpu.jwks_request_failed',
+  'policy.model_attestation_required',
+  'binding.spki_fingerprint_required',
+  'policy.gpu_evidence_required',
+])(
+  'keeps missing evidence %s unverifiable even when it is not retryable',
+  (code) => {
+    const report = reportFromError(
+      {
+        failure: { code, details: { reason: 'http_status', status: 403 } },
+        retryable: false,
+      },
+      { kind: 'model', model: 'demo-model' },
+    );
+    expect(report.status).toBe('unverifiable');
+    expect(report.error?.code).toBe(code);
+    expect(report.error?.message).not.toContain('SDK rejected');
+    expect(verificationStatus([exampleReport, report])).toBe('unverifiable');
+  },
+);
+
 test('never serializes arbitrary exception messages or causes', () => {
   const report = reportFromError(new Error('Authorization: secret-token'), {
     kind: 'reply',

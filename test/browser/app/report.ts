@@ -36,6 +36,19 @@ const view = createVerificationReportView({
 });
 
 for (const [label, action] of Object.entries({
+  'Set nested GPU payload': () =>
+    view.setReport({
+      ...exampleReport,
+      evidence: {
+        ...rawEvidence,
+        nvidiaPayload: `{"evidence_list":${'['.repeat(10000)}0${']'.repeat(10000)}}`,
+      },
+    }),
+  'Set malformed GPU payload': () =>
+    view.setReport({
+      ...exampleReport,
+      evidence: { ...rawEvidence, nvidiaPayload: 'not JSON' },
+    }),
   'Set partial model': () =>
     view.setReport({ ...exampleReport, kind: 'model', status: 'partial' }),
   Clear: () => view.clear(),

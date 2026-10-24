@@ -235,14 +235,18 @@ export function createVerificationReportView(
         },
       ]);
       let payload: Record<string, unknown> = {};
+      let evidenceList: string | undefined;
       try {
         const parsed: unknown = JSON.parse(
           report.evidence?.nvidiaPayload ?? '{}',
         );
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
           payload = parsed as Record<string, unknown>;
+          if (Array.isArray(payload.evidence_list))
+            evidenceList = JSON.stringify(payload.evidence_list, null, 2);
+        }
       } catch {
-        payload = {};
+        // Keep the raw payload available if decoding or pretty-printing fails.
       }
       copyValue(
         gpu,
@@ -254,13 +258,7 @@ export function createVerificationReportView(
         'Architecture',
         typeof payload.arch === 'string' ? payload.arch : undefined,
       );
-      copyValue(
-        gpu,
-        'Evidence list',
-        Array.isArray(payload.evidence_list)
-          ? JSON.stringify(payload.evidence_list, null, 2)
-          : undefined,
-      );
+      copyValue(gpu, 'Evidence list', evidenceList);
       copyValue(gpu, 'Raw NVIDIA payload', report.evidence?.nvidiaPayload);
     }
     const tdx = accordion(pane, 'TDX Attestation', 'intel');

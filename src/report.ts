@@ -61,8 +61,13 @@ function string(value: unknown): string {
   return value;
 }
 
-function optionalString(value: unknown): string | undefined {
-  return value === undefined ? undefined : string(value);
+type ReadString = (value: unknown) => string;
+
+function optionalString(
+  value: unknown,
+  readString: ReadString,
+): string | undefined {
+  return value === undefined ? undefined : readString(value);
 }
 
 function choice<const T extends string>(
@@ -73,15 +78,18 @@ function choice<const T extends string>(
   return value as T;
 }
 
-function signer(value: unknown): SigningIdentity {
+function signer(value: unknown, readString: ReadString): SigningIdentity {
   const input = object(value);
   return {
     signingAlgo: choice(input.signingAlgo, ['ed25519', 'ecdsa']),
-    signingAddress: string(input.signingAddress),
+    signingAddress: readString(input.signingAddress),
   };
 }
 
-function attestation(value: unknown): AttestationDetails {
+function attestation(
+  value: unknown,
+  readString: ReadString,
+): AttestationDetails {
   const input = object(value);
   const deployment = object(input.deployment);
   const measurements = object(deployment.runtimeMeasurements);
@@ -91,14 +99,14 @@ function attestation(value: unknown): AttestationDetails {
     Partial<
       Pick<VerifiedModelAttestation, 'gpuEvidence' | 'signingPublicKey'>
     > = {
-    signer: signer(input.signer),
+    signer: signer(input.signer, readString),
     tcbStatus: choice(input.tcbStatus, tcbStatuses) as TcbStatus,
-    advisoryIds: Array.from(input.advisoryIds, string),
+    advisoryIds: Array.from(input.advisoryIds, readString),
     deployment: {
-      appCompose: string(deployment.appCompose),
+      appCompose: readString(deployment.appCompose),
       runtimeMeasurements: {
-        osImageHash: optionalString(measurements.osImageHash),
-        composeHash: optionalString(measurements.composeHash),
+        osImageHash: optionalString(measurements.osImageHash, readString),
+        composeHash: optionalString(measurements.composeHash, readString),
       },
     },
     deploymentProvenance: choice(input.deploymentProvenance, [
@@ -113,7 +121,7 @@ function attestation(value: unknown): AttestationDetails {
     ...(input.signingPublicKey === undefined
       ? {}
       : {
-          signingPublicKey: string(input.signingPublicKey),
+          signingPublicKey: readString(input.signingPublicKey),
         }),
   };
   if (input.tlsBinding !== undefined) {
@@ -122,7 +130,7 @@ function attestation(value: unknown): AttestationDetails {
     const tlsBinding: GatewayTlsBinding =
       kind === 'none'
         ? { kind }
-        : { kind, spkiFingerprint: string(tls.spkiFingerprint) };
+        : { kind, spkiFingerprint: readString(tls.spkiFingerprint) };
     return { ...output, tlsBinding };
   }
   if (output.gpuEvidence === undefined) invalid();
@@ -130,6 +138,16 @@ function attestation(value: unknown): AttestationDetails {
 }
 
 export function parseVerificationReport(value: unknown): VerificationReport {
+  let stringBytes = 0;
+  const readString: ReadString = (value) => {
+    const parsed = string(value);
+    // Bound supported strings before constructing the complete report. The
+    // final check also counts keys, enum values and JSON punctuation.
+    stringBytes += new TextEncoder().encode(JSON.stringify(parsed)).length;
+    if (stringBytes > MAX_REPORT_BYTES)
+      throw new RangeError('Verification report exceeds 1 MiB.');
+    return parsed;
+  };
   const input = object(value);
   if (input.schemaVersion !== 1) invalid();
   const report: VerificationReport = {
@@ -142,41 +160,41 @@ export function parseVerificationReport(value: unknown): VerificationReport {
       'unverifiable',
     ]),
     scope: choice(input.scope, ['model', 'gateway', 'unknown']),
-    model: optionalString(input.model),
-    completionId: optionalString(input.completionId),
-    verifiedAt: optionalString(input.verifiedAt),
+    model: optionalString(input.model, readString),
+    completionId: optionalString(input.completionId, readString),
+    verifiedAt: optionalString(input.verifiedAt, readString),
   };
   if (report.kind === 'reply' && !report.completionId) invalid();
   if (report.kind === 'model' && !report.model) invalid();
   if (report.verifiedAt && !Number.isFinite(Date.parse(report.verifiedAt)))
     invalid();
   if (input.attestation !== undefined)
-    report.attestation = attestation(input.attestation);
+    report.attestation = attestation(input.attestation, readString);
   if (input.evidence !== undefined) {
     if (!report.attestation) invalid();
     const evidence = object(input.evidence);
     report.evidence = {
-      intelQuote: string(evidence.intelQuote),
-      nonce: string(evidence.nonce),
-      eventLog: string(evidence.eventLog),
-      reportedQuoteData: optionalString(evidence.reportedQuoteData),
-      nvidiaPayload: optionalString(evidence.nvidiaPayload),
+      intelQuote: readString(evidence.intelQuote),
+      nonce: readString(evidence.nonce),
+      eventLog: readString(evidence.eventLog),
+      reportedQuoteData: optionalString(evidence.reportedQuoteData, readString),
+      nvidiaPayload: optionalString(evidence.nvidiaPayload, readString),
     };
   }
   if (input.signature !== undefined) {
     const signature = object(input.signature);
     report.signature = {
       kind: choice(signature.kind, ['provider_tee', 'gateway']),
-      signer: signer(signature.signer),
-      signedText: string(signature.signedText),
-      signature: string(signature.signature),
+      signer: signer(signature.signer, readString),
+      signedText: readString(signature.signedText),
+      signature: readString(signature.signature),
     };
   }
   if (input.error !== undefined) {
     const error = object(input.error);
     report.error = {
-      code: optionalString(error.code),
-      message: string(error.message),
+      code: optionalString(error.code, readString),
+      message: readString(error.message),
     };
   }
   if (report.status === 'verified' || report.status === 'partial') {
@@ -224,7 +242,17 @@ export function parseVerificationReport(value: unknown): VerificationReport {
 
 export function parseVerificationReports(value: unknown): VerificationReport[] {
   if (!Array.isArray(value) || value.length > 1000) invalid();
-  const reports = Array.from(value, parseVerificationReport);
+  const reports: VerificationReport[] = [];
+  let bytes = 2;
+  for (const input of value) {
+    const report = parseVerificationReport(input);
+    bytes +=
+      new TextEncoder().encode(JSON.stringify(report)).length +
+      (reports.length ? 1 : 0);
+    if (bytes > MAX_REPORT_BYTES)
+      throw new RangeError('Verification reports exceed 1 MiB.');
+    reports.push(report);
+  }
   if (new Set(reports.map((report) => report.model).filter(Boolean)).size > 1) {
     throw new TypeError('Reports must refer to the same model.');
   }
@@ -236,11 +264,6 @@ export function parseVerificationReports(value: unknown): VerificationReport[] {
     ).size > 1
   ) {
     throw new TypeError('Reports must refer to the same reply.');
-  }
-  if (
-    new TextEncoder().encode(JSON.stringify(reports)).length > MAX_REPORT_BYTES
-  ) {
-    throw new RangeError('Verification reports exceed 1 MiB.');
   }
   return reports;
 }

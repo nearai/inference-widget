@@ -1,1 +1,4 @@
-export { createVerificationWidget } from '../../../src/index';
+export {
+  createVerificationWidget,
+  createVerificationFrame,
+} from '../../../src/index';

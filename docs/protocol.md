@@ -2,6 +2,15 @@
 
 The parent and viewer use `postMessage` with protocol version `1`.
 
+Cloud UI's `/verify` iframe mode accepts this protocol when the widget supplies
+`parentOrigin`, `instanceId` and `requestId` in its URL. It supports single
+reports, replica collections, empty collections, `canRequestReports` and `theme`.
+The public Cloud UI viewer accepts HTTPS and loopback development parents under
+its framing policy, and pins the exact parent origin and both routing IDs.
+These checks identify the sender; they do not prove the parent ran the SDK.
+Cloud UI also retains its older `NEAR_AI_*` document protocol for bare iframe
+URLs; it is selected only when no widget routing parameters are present.
+
 ## Viewer integration
 
 ```ts
