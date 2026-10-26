@@ -1,168 +1,129 @@
-# Verification frame protocol
+# Verification reports protocol
 
-The parent and viewer use `postMessage` with protocol version `1`.
-
-## Viewer integration
-
-```ts
-import { connectVerificationFrame } from '@nearai/inference-widget/protocol';
-
-const connection = connectVerificationFrame({
-  allowedParentOrigins: ['https://your-application.example'],
-  onReports(reports) {
-    renderReports(reports);
-  },
-});
-```
-
-Call the helper after the viewer is ready to render. Call `connection.destroy()` on
-teardown. The helper validates the parent origin and window, sends `ready`,
-validates incoming reports and passes a fresh copy of supported report fields
-to the renderer. Render report values as text. An invalid report or a renderer
-exception sends a generic `error`, causing the widget to hide the viewer.
-
-The viewer must allow intended parent origins in its HTTP `frame-ancestors`
-policy. Configure `allowedParentOrigins` independently of URL parameters.
-Do not load account providers, analytics or support scripts in the viewer.
+Both Cloud UI `/verify` and the optional packaged viewer use this protocol.
+The application verifies with the SDK and sends display reports. The viewer
+validates structure and consistency; it does not independently verify evidence.
 
 ## Messages
 
-Every message contains `protocolVersion: 1`, `instanceId` and `requestId`.
+Each message contains `version: 1` and a nonempty `requestId` (at most 128
+characters). The viewer generates a fresh ID when ready and for every refresh.
 
-| Type | Direction | Payload |
+| Type | Direction | Additional fields |
 | --- | --- | --- |
-| `nearai:ready` | Viewer to parent | None |
-| `nearai:request-reports` | Viewer to parent | None |
-| `nearai:close` | Viewer to parent | None |
-| `nearai:report` | Parent to viewer | `report` |
-| `nearai:reports` | Parent to viewer | `reports` |
-| `nearai:error` | Viewer to parent | `message` |
+| `NEAR_AI_VERIFICATION_CENTER_READY` | Viewer → parent | None |
+| `NEAR_AI_VERIFICATION_REPORT` | Parent → viewer | `reports: VerificationReport[]` |
+| `NEAR_AI_REQUEST_VERIFICATION_REPORT` | Viewer → parent | None |
+| `NEAR_AI_VERIFICATION_ERROR` | Viewer → parent | Generic `message` |
+| `NEAR_AI_VERIFICATION_CLOSE` | Viewer → parent | None |
 
-The widget adds `parentOrigin`, `instanceId`, `requestId` and `theme` to the
-viewer URL query. `canRequestReports` tells the viewer whether the host provides
-a refresh callback. These are routing and presentation values, not credentials.
-`canClose` is true when the parent provides an `onClose` handler. With this flag,
-`connectVerificationFrame()` relays an unhandled Escape key from the viewer as
-`nearai:close`. Native modal dialogs and dismissible popovers inside the viewer
-handle Escape first, including a dialog's own cancel handler. The parent accepts
-close messages only after readiness and with the same origin, window, version
-and routing checks as other messages. The widget closes its dialog and restores
-focus; a caller-owned iframe
-opts in by passing `onClose`.
-Destroying the viewer connection also removes its keyboard listener. This is an
-optional addition to version 1; older viewers continue to use the parent close
-button.
-Both sides check the exact origin, sender window, protocol version and IDs.
-Messages from other instances or old requests are ignored.
-`isVerificationMessage()` checks the envelope only; always use
-`parseVerificationReport()` before rendering a report.
+There is one reports payload shape. A single report still uses an array:
 
-## Report
+```js
+{
+  type: 'NEAR_AI_VERIFICATION_REPORT',
+  version: 1,
+  requestId,
+  reports: [{ schemaVersion: 1, /* VerificationReport fields */ }],
+}
+```
 
-`VerificationReport` is exported from the main and protocol entries. It contains:
+No credentials, reports or parent-generated routing IDs belong in the viewer URL.
+`darkMode`, `showHeader`, `canRequestReports` and `canClose` accept `true` or
+`false`. Widget helpers explicitly set capabilities. Refresh and close default
+to disabled for a bare iframe. `showHeader` defaults may depend on the viewer;
+set it explicitly when appearance matters.
 
-- `schemaVersion: 1` and `kind: 'model' | 'reply'`.
-- `status: 'verified' | 'partial' | 'failed' | 'unverifiable'`.
-- `scope: 'model' | 'gateway' | 'unknown'`.
-- `model` for model reports; `completionId` for reply reports.
-- Optional SDK signature and attestation details, `verifiedAt` and an error.
+## Native parent integration
 
-Positive reports (`verified` or `partial`) require attestation details. Reply
-reports with these statuses also require a signature whose identity and kind
-match the attestation and scope.
-For positive model-scoped replies, the model must match the model in the
-provider's signed text; an omitted model is derived from that text.
-Gateway scope cannot use `verified`. Errors cannot accompany positive statuses.
-The parser validates structure and consistency, not cryptographic evidence.
-
-The adapter preserves `deploymentProvenance: 'not_checked'`; the viewer must not
-present that as approved code or deployment provenance. Missing timestamps and
-optional fields must be shown as unavailable, not synthesized.
-
-Reports are limited to 1 MiB of UTF-8 JSON. Unsupported object fields are
-discarded. Include only public verification evidence, never credentials or chat
-content. Reports travel only through messages and are not stored persistently.
-
-The optional `evidence` object contains `intelQuote`, `nonce` and serialized
-`eventLog`, with optional `reportedQuoteData` and `nvidiaPayload`. These
-inspection fields accompany an SDK-verified `attestation`; they are not
-additional verification results.
-
-## Report collections
-
-A widget sends `nearai:report` for one report and `nearai:reports` for a collection.
-Use `onReports` to receive both forms as a validated array for
-`view.setReports()`, including empty arrays. `onReport` accepts exactly one report.
-
-A collection must refer to one model and at most one completion ID. The 1 MiB
-limit applies to the entire collection, not to each replica separately.
-
-## Updating reports
-
-The viewer calls `connection.requestReports()` to send `nearai:request-reports`.
-The parent runs its `getReports` callback and sends the resulting reports. The
-viewer does not run the SDK. Without a callback, the parent helper
-resends its current reports; a hosted viewer should hide its reverify control
-when `canRequestReports` is false.
-
-Concurrent refresh requests share one pending callback. Starting a refresh
-clears the old displayed report. A newer application update or destroying the
-connection invalidates the older callback result. Closing a widget dialog
-still allows active SDK verification to update its button status.
-
-`loadTimeoutMs` limits iframe readiness to 15,000 ms by default. The widget,
-parent helper and `verifyModelReports()` accept `verificationTimeoutMs`,
-defaulting to 60,000 ms. A verification timeout ends the wait and ignores late
-results; it does not necessarily cancel the SDK's underlying work. Widget and
-model-helper timeouts produce an unverifiable `verification.timeout` report.
-The model helper shares one deadline across all steps, retaining completed
-replica results so a timeout cannot replace a known verification failure.
-
-Retry with the viewer's Verify again control, or `reload()` after a parent
-connection error. Reload changes the request ID and resends buffered reports
-after the next ready message. If a refresh callback failed or timed out and left
-no report, it retries that callback after the viewer is ready.
-`onStateChange('error', message)` receives a generic, credential-free message on
-viewer timeout, protocol errors or callback failure. Return SDK verification
-failures as error reports.
-
-`nearai:reports` may contain an empty array to clear the viewer.
-
-## Native PostMessage integration
-
-Use the protocol directly when the parent cannot use `createVerificationFrame()`.
-`reports` below must contain verified SDK results adapted to `VerificationReport`.
-Run `examples/iframe.ts` for SDK verification and refresh requests with
-native messaging, or use this smaller example to display existing reports.
+Register the listener before navigating the iframe. `getFreshReports` below is
+your SDK verification plus report normalization, within a budget shorter than
+the viewer's 60-second wait.
 
 ```js
 const iframe = document.querySelector('#verification');
-const viewerUrl = new URL('https://your-verification-host.example/verify/embed');
-const routing = {
-  protocolVersion: 1,
-  instanceId: crypto.randomUUID(),
-  requestId: crypto.randomUUID(),
-};
-viewerUrl.searchParams.set('parentOrigin', location.origin);
-viewerUrl.searchParams.set('instanceId', routing.instanceId);
-viewerUrl.searchParams.set('requestId', routing.requestId);
-viewerUrl.searchParams.set('theme', 'light');
-viewerUrl.searchParams.set('canRequestReports', 'false');
-
-function receive(event) {
+const viewer = new URL('https://cloud-stg.near.ai/verify');
+viewer.searchParams.set('canRequestReports', 'true');
+let revision = 0;
+async function receive(event) {
+  if (event.source !== iframe.contentWindow || event.origin !== viewer.origin) return;
   const message = event.data;
-  if (event.origin !== viewerUrl.origin || event.source !== iframe.contentWindow ||
-      !message || message.protocolVersion !== routing.protocolVersion ||
-      message.instanceId !== routing.instanceId || message.requestId !== routing.requestId) return;
-  if (message.type === 'nearai:ready' || message.type === 'nearai:request-reports') {
-    iframe.contentWindow.postMessage({
-      ...routing, type: 'nearai:reports', reports,
-    }, viewerUrl.origin);
-  }
+  if (!message || message.version !== 1 || typeof message.requestId !== 'string' ||
+      !message.requestId || message.requestId.length > 128) return;
+  if (!['NEAR_AI_VERIFICATION_CENTER_READY', 'NEAR_AI_REQUEST_VERIFICATION_REPORT'].includes(message.type)) return;
+  const current = ++revision;
+  const reports = await getFreshReports(); // Return classified failure reports on SDK errors.
+  if (revision !== current) return;
+  iframe.contentWindow?.postMessage({
+    type: 'NEAR_AI_VERIFICATION_REPORT', version: 1,
+    requestId: message.requestId, reports,
+  }, viewer.origin);
 }
 window.addEventListener('message', receive);
-iframe.src = viewerUrl.href;
+iframe.referrerPolicy = 'no-referrer';
+iframe.setAttribute('allow', 'clipboard-write');
+iframe.src = viewer.href;
+// Teardown: increment revision, remove the listener and unload the iframe.
 ```
 
-This example resends existing reports. For fresh evidence, run the SDK in the
-parent and send the new reports. Remove the listener during teardown.
+For full cancellation, load timeouts, reload handling and replay protection use
+`createVerificationFrame()` instead of reproducing its lifecycle code.
+
+## Lifecycle and trust boundary
+
+Both sides check exact origin, sender window, version and request ID. The viewer
+pins the first valid parent origin; the self-hosted helper additionally requires
+an explicit allowed origin list. Parents must use the exact viewer origin as
+`targetOrigin`. The initial READY may use `*` and contains only its public ID.
+
+A refresh clears old reports locally and waits for the new request ID. Do not
+send empty arrays: they are invalid display payloads. `setReports([])` unloads
+the iframe; subsequent nonempty reports start a new handshake. Reload cancels
+pending work and binds the new viewer ID. Old results and old IDs are ignored.
+
+With `canRequestReports=false`, the viewer hides Verify again. Re-sending cached
+reports is not fresh verification. With `canClose=true`, an unhandled Escape key
+sends CLOSE; the host validates it and restores focus/scrolling. Native modal
+dialogs and dismissible popovers inside the viewer consume Escape first.
+Destroying either connection removes its listeners and timers.
+
+A viewer response timeout produces a generic error and invalidates the request.
+The parent must offer reload/retry. No SDK error text, API key or chat content is
+sent automatically. A malicious parent can supply fabricated reports: the viewer
+is a display surface, not an independent verification authority.
+
+## Report validation
+
+`VerificationReport` and parsers are exported from both package entries.
+Each report contains `schemaVersion: 1`, `kind: 'model' | 'reply'`, `scope` and
+`status`. Optional signatures, attestations, timestamps and explicit raw evidence
+are projected to supported fields. Deployment `appCompose` is optional.
+
+Successful response reports must bind signer, signature kind and signed model
+consistently. Gateway signatures cover request/response hashes and remain
+partial. Collections require one model/completion, at most 1000 reports and
+1 MiB total UTF-8 JSON; parsing stops as the cumulative budget is exhausted.
+Failure takes precedence over unavailable and successful evidence.
+
+Use the adapters before sending. Raw evidence and deployment configuration need
+explicit opt-in. Render values as text. Keep viewer framing headers and parent
+origin policy aligned with intended deployments; avoid account providers,
+analytics and support scripts on the embedded surface.
+
+## Self-hosted viewer
+
+```js
+import { connectVerificationFrame } from '@nearai/inference-widget/protocol';
+const connection = connectVerificationFrame({
+  allowedParentOrigins: ['https://your-application.example'],
+  onReports: reports => view.setReports(reports),
+  onPending: () => view.clear(),
+  onError: message => showError(message),
+});
+// Wire view's optional reverify handler to connection.requestReports().
+// connection.destroy() on teardown.
+```
+
+The viewer must allow intended hosts through HTTP `frame-ancestors` as well.
+The provided helper rejects standalone use and untrusted origins. No legacy
+messages or alternate document/result envelopes are accepted.

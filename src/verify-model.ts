@@ -23,6 +23,7 @@ export type VerifyModelReportsOptions = {
   gatewayVerification?: GatewayVerificationOptions;
   modelVerification?: ModelVerificationOptions;
   verificationTimeoutMs?: number;
+  includeRawEvidence?: boolean;
 };
 
 export async function verifyModelReports({
@@ -31,7 +32,8 @@ export async function verifyModelReports({
   signingAlgo = 'ed25519',
   gatewayVerification,
   modelVerification,
-  verificationTimeoutMs = DEFAULT_VERIFICATION_TIMEOUT_MS,
+  verificationTimeoutMs = DEFAULT_VERIFICATION_TIMEOUT_MS - 1_000,
+  includeRawEvidence = false,
 }: VerifyModelReportsOptions): Promise<VerificationReport[]> {
   if (!model.trim()) throw new TypeError('A model ID is required.');
   if (!Number.isFinite(verificationTimeoutMs) || verificationTimeoutMs <= 0)
@@ -64,7 +66,8 @@ export async function verifyModelReports({
       return reportFromAttestation({
         model,
         attestation,
-        evidence: fetched.attestation,
+        evidence: includeRawEvidence ? fetched.attestation : undefined,
+        includeDeploymentConfiguration: includeRawEvidence,
       });
     } catch (error) {
       return failure(error, 'gateway');
@@ -75,20 +78,11 @@ export async function verifyModelReports({
       const metadata = await beforeDeadline(() =>
         client.fetchModelMetadata(model),
       );
-      if (metadata.providerType !== 'vllm' || !metadata.attestationSupported) {
-        return [
-          {
-            schemaVersion: 1,
-            kind: 'model',
-            model,
-            scope: 'model',
-            status: 'unverifiable',
-            error: {
-              message:
-                'The model catalog does not advertise model TEE attestation. Gateway verification does not verify model execution.',
-            },
-          },
-        ];
+      if (
+        metadata.providerType.trim().toLowerCase() !== 'vllm' ||
+        !metadata.attestationSupported
+      ) {
+        return [];
       }
       const fetched = await beforeDeadline(() =>
         client.fetchModelAttestations({
@@ -114,7 +108,12 @@ export async function verifyModelReports({
                 verifiers: modelVerification?.verifiers,
               }),
             );
-            return reportFromAttestation({ model, attestation, evidence });
+            return reportFromAttestation({
+              model,
+              attestation,
+              evidence: includeRawEvidence ? evidence : undefined,
+              includeDeploymentConfiguration: includeRawEvidence,
+            });
           } catch (error) {
             return failure(error, 'model');
           }

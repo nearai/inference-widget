@@ -74,7 +74,7 @@ for (const url of ['/', 'http://127.0.0.1:4175/']) {
     page.on('response', (response) => {
       if (response.status() === 403) lateResponses++;
     });
-    await page.route('**/cloud/**', async (route) => {
+    await page.route('https://cloud-stg-api.near.ai/**', async (route) => {
       const first = ++requests === 1;
       if (first) await blocked;
       await route.fulfill({
@@ -86,25 +86,23 @@ for (const url of ['/', 'http://127.0.0.1:4175/']) {
     await page.getByLabel('API key', { exact: true }).fill('synthetic-key');
     await page.getByLabel('Model', { exact: true }).fill('demo-model');
     const send = page.getByRole('button', {
-      name: 'Send request',
+      name: 'Send message',
       exact: true,
     });
+    await page.getByLabel('Message', { exact: true }).fill('hello');
     await send.click();
     await expect.poll(() => requests).toBe(1);
-    await page.clock.fastForward(60_001);
+    await page.clock.fastForward(120_001);
     await expect(send).toBeEnabled();
-    await expect(page.locator('#reply-status')).toContainText(
-      'verification.timeout',
-    );
+    await expect(page.locator('#status')).toContainText('Request timed out');
     release();
     await expect.poll(() => lateResponses).toBe(1);
-    await expect(page.locator('#reply-status')).toContainText(
-      'verification.timeout',
-    );
-    await expect(page.locator('#reply-text')).toBeHidden();
-    await expect(page.locator('#reply-verification')).toBeEmpty();
+    await expect(page.locator('#status')).toContainText('Request timed out');
+    await expect(page.locator('#reply')).toBeHidden();
+    await expect(page.locator('#response-verification')).toBeEmpty();
+    await page.getByLabel('Message', { exact: true }).fill('hello');
     await send.click();
-    await expect(page.locator('#reply-status')).toContainText('HTTP 401');
+    await expect(page.locator('#status')).toContainText('HTTP 401');
     await expect(send).toBeEnabled();
     expect(requests).toBe(2);
   });
@@ -135,7 +133,7 @@ for (const outcome of ['resolve', 'reject'] as const) {
           } } };
           async verifyResponse() { return result; }
         }
-        export class AttestationClient {}
+        export class AttestationClient { async fetchModelMetadata() { return { providerType: 'vllm', attestationSupported: true }; } }
         export const createTdxQuoteVerifier = () => () => {};
         export const createGpuEvidenceVerifier = () => () => {};
         export const verifyGatewayAttestation = () => {};
@@ -147,23 +145,20 @@ for (const outcome of ['resolve', 'reject'] as const) {
     await page.getByLabel('API key', { exact: true }).fill('synthetic-key');
     await page.getByLabel('Model', { exact: true }).fill('demo-model');
     const send = page.getByRole('button', {
-      name: 'Send request',
+      name: 'Send message',
       exact: true,
     });
+    await page.getByLabel('Message', { exact: true }).fill('hello');
     await send.click();
-    await page.clock.fastForward(60_001);
-    await expect(page.locator('#reply-status')).toContainText(
-      'verification.timeout',
-    );
+    await page.clock.fastForward(120_001);
+    await expect(page.locator('#status')).toContainText('Request timed out');
     await page.evaluate(async () => {
       (
         globalThis as unknown as { __finishPreflight: () => void }
       ).__finishPreflight();
       await Promise.resolve();
     });
-    await expect(page.locator('#reply-status')).toContainText(
-      'verification.timeout',
-    );
+    await expect(page.locator('#status')).toContainText('Request timed out');
     expect(
       await page.evaluate(
         () =>
@@ -171,12 +166,13 @@ for (const outcome of ['resolve', 'reject'] as const) {
             .__preflightCalls,
       ),
     ).toEqual({ verify: 1, inference: 0 });
+    await page.getByLabel('Message', { exact: true }).fill('hello');
     await send.click();
-    await expect(page.locator('#reply-text')).toHaveText('Hello after retry!');
-    await expect(page.locator('#reply-verification button')).toHaveText(
-      'Verify reply',
+    await expect(page.locator('#reply')).toHaveText('Hello after retry!');
+    await expect(page.locator('#response-verification button')).toHaveText(
+      'Verify response',
     );
-    await page.clock.fastForward(60_001);
+    await page.clock.fastForward(120_001);
     expect(
       await page.evaluate(
         () =>
@@ -184,9 +180,7 @@ for (const outcome of ['resolve', 'reject'] as const) {
             .__preflightCalls,
       ),
     ).toEqual({ verify: 2, inference: 1 });
-    await expect(page.locator('#reply-status')).toContainText(
-      'Use the button below',
-    );
+    await expect(page.locator('#status')).toContainText('Response received');
     expect(errors).toEqual([]);
   });
 }
@@ -200,7 +194,7 @@ for (const kind of ['modal', 'shadow-modal', 'nonmodal'] as const) {
     await trigger.click();
     const viewer = page.frameLocator('dialog iframe');
     await expect(viewer.locator('[data-field="status"]')).toHaveText(
-      'Reply verified',
+      'Response verified',
     );
     const child = page
       .frames()
@@ -273,7 +267,7 @@ for (const kind of ['auto', 'shadow-auto', 'manual'] as const) {
     await trigger.click();
     const viewer = page.frameLocator('dialog iframe');
     await expect(viewer.locator('[data-field="status"]')).toHaveText(
-      'Reply verified',
+      'Response verified',
     );
     const child = page
       .frames()

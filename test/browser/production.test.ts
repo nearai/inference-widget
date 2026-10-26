@@ -1,54 +1,39 @@
 import { expect, test } from '@playwright/test';
 
-test('production examples initialize model, reply and iframe integrations', async ({
+test('production example initializes and renders through the production viewer', async ({
   page,
 }) => {
   const failures: string[] = [];
-  let requests = 0;
   page.on('pageerror', (error) => failures.push(error.message));
-  await page.route('**/cloud/**', (route) => {
-    requests += 1;
-    return route.fulfill({
+  await page.route('https://cloud-stg-api.near.ai/**', (route) =>
+    route.fulfill({
       status: 401,
       json: { error: { message: 'Unauthorized' } },
-    });
-  });
-  await page.goto('http://127.0.0.1:4175/');
-  await expect(page.getByLabel('API base URL')).toHaveValue(
-    'http://127.0.0.1:4175/cloud/v1/',
+    }),
   );
+  await page.goto('http://127.0.0.1:4175/');
+  await page.getByLabel('Viewer URL').fill('http://127.0.0.1:4175/embed.html');
   await page.getByLabel('API key', { exact: true }).fill('production-test-key');
-  await page.getByLabel('Model', { exact: true }).fill('example-model');
-  await page.getByRole('button', { name: 'Verify environment' }).click();
-  await expect(page.locator('#model-reports [data-field="status"]')).toHaveText(
+  await page.getByRole('button', { name: 'Verify model', exact: true }).click();
+  const viewer = page.frameLocator('dialog iframe');
+  await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Unable to verify',
   );
-  await page.locator('#model-verification button').click();
-  await expect(
-    page
-      .frameLocator('.nearai-verification-frame')
-      .locator('[data-field="status"]'),
-  ).toHaveText('Unable to verify');
-  await page
-    .frameLocator('.nearai-verification-frame')
+  await viewer
+    .getByRole('button', { name: 'Verify again', exact: true })
+    .click();
+  await expect(viewer.locator('[data-field="status"]')).toHaveText(
+    'Unable to verify',
+  );
+  await viewer
     .getByRole('tab', { name: 'Model Verification', exact: true })
     .press('Escape');
-  await expect(page.locator('.nearai-verification-frame')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Send request', exact: true }).click();
-  await expect(page.locator('#reply-status')).toContainText('HTTP 401');
-  await page.getByRole('button', { name: 'Verify in iframe' }).click();
-  const viewer = page.frameLocator('#example-iframe');
-  await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Unable to verify',
-  );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
-  await expect.poll(() => requests).toBe(7);
-  await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Unable to verify',
-  );
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await page.getByLabel('Message', { exact: true }).fill('hello');
+  await page.getByRole('button', { name: 'Send message' }).click();
+  await expect(page.locator('#status')).toContainText('HTTP 401');
   expect(failures).toEqual([]);
 });
-
 test('production build includes a working viewer entry', async ({ page }) => {
   await page.goto('http://127.0.0.1:4175/embed.html');
   await expect(page).toHaveTitle('SDK verification report');

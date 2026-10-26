@@ -3,6 +3,7 @@ export {
   type VerificationFrame,
   type VerificationFrameOptions,
   type VerificationFrameState,
+  type VerificationRequestContext,
 } from './frame';
 export {
   createVerificationWidget,

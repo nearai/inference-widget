@@ -12,7 +12,7 @@ test('renders the public component using only packaged styles without affecting 
 }) => {
   const report = page.locator('#report .nearai-verification-report');
   await expect(report.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await expect(report.locator('[data-field="summary"]')).toContainText(
     'demo-model',
@@ -21,7 +21,7 @@ test('renders the public component using only packaged styles without affecting 
     report
       .getByRole('tabpanel', { name: 'Model Verification', exact: true })
       .locator('[data-field="evidence"]'),
-  ).toContainText('approval not checked');
+  ).toContainText('Approval not checked');
   await expect(report).toHaveCSS('background-color', 'rgb(255, 255, 255)');
   await expect(report.locator('.nearai-report-card').first()).toHaveCSS(
     'background-color',
@@ -39,8 +39,9 @@ test('renders the public component using only packaged styles without affecting 
     'none',
   );
   await expect(page.locator('#host-content')).toHaveText('Host content');
-  await report.getByText('Report details', { exact: true }).click();
-  await expect(report.locator('pre')).toBeVisible();
+  await expect(report.getByText('Report details', { exact: true })).toHaveCount(
+    0,
+  );
 });
 
 test('a partial model report does not claim Gateway verification', async ({
@@ -65,7 +66,7 @@ for (const kind of ['nested', 'malformed']) {
       .click();
     const report = page.locator('#report .nearai-verification-report');
     await expect(report.locator('[data-field="status"]')).toHaveText(
-      'Reply verified',
+      'Response verified',
     );
     await report.getByText('GPU Attestation', { exact: true }).click();
     await expect(
@@ -109,7 +110,7 @@ test('replaces reports, clears obsolete evidence and rejects invalid updates wit
     'Waiting',
   );
   await expect(report).not.toHaveAttribute('data-status', 'verified');
-  await expect(report.locator('pre')).toBeEmpty();
+  await expect(report.locator('pre')).toHaveCount(0);
 });
 
 test('renders report text without interpreting HTML and cleans up only owned DOM', async ({

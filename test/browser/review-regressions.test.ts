@@ -1,3 +1,5 @@
+import { observe } from './observe';
+observe();
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
@@ -140,7 +142,7 @@ for (const kind of ['reply', 'model'] as const) {
       );
       await page.locator('#bound button').click();
       await expect(viewer.locator('[data-field="status"]')).toHaveText(
-        kind === 'reply' ? 'Reply verified' : 'Model verified',
+        kind === 'reply' ? 'Response verified' : 'Model verified',
       );
       await expect(page.locator('#bound')).toHaveAttribute('data-calls', '2');
       await expect(page.locator('#bound button')).toHaveAttribute(
@@ -182,13 +184,13 @@ test('Escape closes the modal after a cross-origin viewer refresh and restores f
   await trigger.click();
   const viewer = page.frameLocator('dialog iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await viewer
     .getByRole('button', { name: 'Verify again', exact: true })
     .click();
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await viewer
     .getByRole('tab', { name: 'Model Verification', exact: true })
@@ -223,12 +225,11 @@ test('close messages require readiness, the exact sender and current routing, an
       },
     });
     document.body.dataset.closeCalls = '0';
-    const params = new URL(iframe.src).searchParams;
+
     const message = {
-      type: 'nearai:close',
-      protocolVersion: 1,
-      instanceId: params.get('instanceId'),
-      requestId: params.get('requestId'),
+      type: 'NEAR_AI_VERIFICATION_CLOSE',
+      version: 1,
+      requestId: iframe.dataset.requestId,
     };
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -247,13 +248,15 @@ test('close messages require readiness, the exact sender and current routing, an
   });
   const viewer = page.frameLocator('#close-frame');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
-  const previous = await page.locator('#close-frame').getAttribute('src');
+  const previous = await page
+    .locator('#close-frame')
+    .getAttribute('data-request-id');
   if (!previous) throw new Error('Missing viewer URL');
   await page.locator('#reload-close-frame').click();
   await expect(page.locator('#close-frame')).not.toHaveAttribute(
-    'src',
+    'data-request-id',
     previous,
   );
   const reloaded = await page.locator('#close-frame').getAttribute('src');
@@ -261,25 +264,24 @@ test('close messages require readiness, the exact sender and current routing, an
     .poll(() => page.frames().some((frame) => frame.url() === reloaded))
     .toBe(true);
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await page.evaluate((previous) => {
     const iframe = document.querySelector<HTMLIFrameElement>('#close-frame');
     if (!iframe) throw new Error('Missing viewer');
-    const params = new URL(iframe.src).searchParams;
+
     const message = {
-      type: 'nearai:close',
-      protocolVersion: 1,
-      instanceId: params.get('instanceId'),
-      requestId: params.get('requestId'),
+      type: 'NEAR_AI_VERIFICATION_CLOSE',
+      version: 1,
+      requestId: iframe.dataset.requestId,
     };
     for (const invalid of [
       { origin: location.origin, source: iframe.contentWindow, data: message },
       { origin: 'http://127.0.0.1:4174', source: window, data: message },
       ...[
-        { protocolVersion: 2 },
-        { instanceId: 'other-instance' },
-        { requestId: new URL(previous).searchParams.get('requestId') },
+        { version: 2 },
+
+        { requestId: previous },
       ].map((override) => ({
         origin: 'http://127.0.0.1:4174',
         source: iframe.contentWindow,
@@ -311,14 +313,9 @@ test('close messages require readiness, the exact sender and current routing, an
     .getByRole('tab', { name: 'Model Verification', exact: true })
     .press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-close-calls', '1');
-  await page.locator('#destroy-close-frame').click();
-  await child
-    .getByRole('tab', { name: 'Model Verification', exact: true })
-    .press('Escape');
-  await expect(page.locator('body')).toHaveAttribute('data-close-calls', '1');
   // A real teardown removes the viewer's key handler as well.
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await child.evaluate(() =>
     dispatchEvent(new PageTransitionEvent('pagehide')),
@@ -332,6 +329,9 @@ test('close messages require readiness, the exact sender and current routing, an
     return event.defaultPrevented;
   });
   expect(prevented).toBe(false);
+  await page.locator('#destroy-close-frame').click();
+  await expect(page.locator('#close-frame')).not.toHaveAttribute('src');
+  await expect(page.locator('body')).toHaveAttribute('data-close-calls', '1');
 });
 
 test('a caller-owned iframe does not capture Escape without an onClose handler', async ({
@@ -356,7 +356,7 @@ test('a caller-owned iframe does not capture Escape without an onClose handler',
   });
   await expect(
     page.frameLocator('#plain-frame').locator('[data-field="status"]'),
-  ).toHaveText('Reply verified');
+  ).toHaveText('Response verified');
   const child = page
     .frames()
     .find((frame) => frame.url().startsWith('http://127.0.0.1:4174/'));
@@ -374,21 +374,15 @@ test('a caller-owned iframe does not capture Escape without an onClose handler',
 });
 
 for (const pending of [false, true]) {
-  test(`example remains usable after repeated back-forward cache lifecycle events with verification pending: ${pending}`, async ({
+  test(`example resets safely after back-forward lifecycle events, pending: ${pending}`, async ({
     page,
   }) => {
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
     let release = () => {};
     const blocked = new Promise<void>((resolve) => {
       release = resolve;
     });
     let requests = 0;
-    let obsoleteResponses = 0;
-    page.on('response', (response) => {
-      if (response.status() === 403) obsoleteResponses++;
-    });
-    await page.route('**/cloud/**', async (route) => {
+    await page.route('https://cloud-stg-api.near.ai/**', async (route) => {
       const call = ++requests;
       if (pending && call <= 2) await blocked;
       await route.fulfill({
@@ -397,43 +391,32 @@ for (const pending of [false, true]) {
       });
     });
     await page.goto('/');
-    await page.getByLabel('API key', { exact: true }).fill('synthetic-key');
-    await page.getByLabel('Model', { exact: true }).fill('demo-model');
     await page
-      .getByRole('button', { name: 'Verify environment', exact: true })
+      .getByLabel('Viewer URL')
+      .fill('http://127.0.0.1:4174/embed.html');
+    await page.getByLabel('API key', { exact: true }).fill('synthetic-key');
+    await page
+      .getByRole('button', { name: 'Verify model', exact: true })
       .click();
     await expect.poll(() => requests).toBe(2);
-    if (!pending)
-      await expect(page.locator('#verify-page-status')).toContainText(
-        'incomplete',
-      );
     for (let index = 0; index < 2; index++) {
       await page.evaluate(() => {
         dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }));
         dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
       });
-      await expect(page.locator('#model-reports')).toBeHidden();
-      await expect(
-        page.getByRole('button', { name: 'Verify environment', exact: true }),
-      ).toBeEnabled();
+      await expect(page.locator('iframe')).toHaveCount(0);
+      await expect(page.getByLabel('API key', { exact: true })).toHaveValue('');
     }
-    await page.getByLabel('Model', { exact: true }).fill('restored-model');
+    await page.getByLabel('API key', { exact: true }).fill('synthetic-key');
     await page
-      .getByRole('button', { name: 'Verify environment', exact: true })
+      .getByRole('button', { name: 'Verify model', exact: true })
       .click();
-    await expect(page.locator('#verify-page-status')).toContainText(
-      'incomplete',
+    const viewer = page.frameLocator('dialog iframe');
+    await expect(viewer.locator('[data-field="status"]')).toHaveText(
+      'Unable to verify',
     );
     release();
-    if (pending) await expect.poll(() => obsoleteResponses).toBe(2);
-    await expect(
-      page.locator('#model-reports [data-field="error"]'),
-    ).toContainText('HTTP 401');
-    await expect(page.locator('#model-reports')).not.toContainText('HTTP 403');
-    await page.locator('#model-verification button').click();
-    await expect(
-      page.frameLocator('dialog iframe').locator('[data-field="status"]'),
-    ).toHaveText('Unable to verify');
-    expect(errors).toEqual([]);
+    await expect(viewer.locator('body')).toContainText('HTTP 401');
+    await expect(viewer.locator('body')).not.toContainText('HTTP 403');
   });
 }

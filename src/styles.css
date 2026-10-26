@@ -640,13 +640,6 @@
   border-top: 1px solid var(--nearai-border);
   padding: 16px;
 }
-.nearai-report-json {
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-  font:
-    12px / 20px ui-monospace,
-    monospace;
-}
 .nearai-report-error {
   padding: 16px;
   border: 1px solid var(--nearai-border);
@@ -668,11 +661,6 @@
   font:
     12px / 20px ui-monospace,
     monospace;
-}
-.nearai-report-footer {
-  color: var(--nearai-muted-foreground);
-  font-size: 12px;
-  line-height: 20px;
 }
 @media (max-width: 479px) {
   .nearai-report-heading {

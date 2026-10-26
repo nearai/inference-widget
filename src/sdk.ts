@@ -12,8 +12,23 @@ import {
 
 export type VerificationClient = Pick<InferenceClient, 'verifyResponse'>;
 
+function displayAttestation(
+  attestation: AttestationDetails,
+  includeDeploymentConfiguration = false,
+): AttestationDetails {
+  const { appCompose, ...deployment } = attestation.deployment;
+  return {
+    ...attestation,
+    deployment: {
+      ...deployment,
+      ...(includeDeploymentConfiguration ? { appCompose } : {}),
+    },
+  };
+}
+
 export function reportFromResult(
   result: VerifiedCompletionResult,
+  options: { includeDeploymentConfiguration?: boolean } = {},
 ): VerificationReport {
   return parseVerificationReport({
     schemaVersion: 1,
@@ -22,7 +37,10 @@ export function reportFromResult(
     scope: result.signatureKind === 'provider_tee' ? 'model' : 'gateway',
     completionId: result.completionId,
     signature: result.signature,
-    attestation: result.attestation,
+    attestation: displayAttestation(
+      result.attestation,
+      options.includeDeploymentConfiguration,
+    ),
   });
 }
 
@@ -30,10 +48,12 @@ export function reportFromAttestation({
   model,
   attestation,
   evidence,
+  includeDeploymentConfiguration = false,
 }: {
   model: string;
   attestation: AttestationDetails;
   evidence?: ModelAttestation | GatewayAttestation;
+  includeDeploymentConfiguration?: boolean;
 }): VerificationReport {
   if (
     evidence &&
@@ -51,7 +71,10 @@ export function reportFromAttestation({
     model,
     status: gateway ? 'partial' : 'verified',
     scope: gateway ? 'gateway' : 'model',
-    attestation,
+    attestation: displayAttestation(
+      attestation,
+      includeDeploymentConfiguration,
+    ),
     evidence: evidence && {
       intelQuote: evidence.intelQuote,
       nonce: evidence.nonce,
@@ -119,7 +142,7 @@ export function reportFromError(
     model_metadata: 'Model metadata',
     model_attestation: 'Model attestation',
     gateway_attestation: 'Gateway attestation',
-    completion_signature: 'Reply signature',
+    completion_signature: 'Response signature',
     completion: 'Inference request',
   };
   const resource =
@@ -149,10 +172,10 @@ export function reportFromError(
     code === 'verification.timeout'
       ? 'Verification timed out. Try again.'
       : code === 'api.completion_not_found'
-        ? 'The SDK has no retained record for this reply. Use the original client before its record expires.'
+        ? 'The SDK has no retained record for this response. Use the original client before its record expires.'
         : unavailable
           ? 'Verification could not be completed. Required context or evidence is unavailable.'
-          : 'The SDK rejected the verification evidence or reply signature.';
+          : 'The SDK rejected the verification evidence or response signature.';
   if (httpStatus !== undefined) {
     const reason =
       httpStatus === 404

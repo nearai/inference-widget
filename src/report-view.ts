@@ -188,7 +188,7 @@ export function createVerificationReportView(
       'Deployment policy':
         evidence.deploymentProvenance === 'verified'
           ? 'Verified'
-          : 'Measurements verified · approval not checked',
+          : 'Approval not checked',
     })) {
       const field = node('div');
       field.append(
@@ -352,18 +352,18 @@ export function createVerificationReportView(
           ? 'Waiting for a report...'
           : state === 'verified'
             ? reply
-              ? 'Reply verified'
+              ? 'Response verified'
               : 'Model verified'
             : state === 'partial'
               ? reply
-                ? 'Reply partially verified'
+                ? 'Response partially verified'
                 : reports.every((report) => report.scope === 'gateway')
                   ? 'Gateway verified'
                   : 'Model partially verified'
               : state === 'failed'
                 ? 'Verification failed'
                 : reply
-                  ? 'Unable to verify reply'
+                  ? 'Unable to verify response'
                   : 'Unable to verify',
       ),
     );
@@ -372,27 +372,26 @@ export function createVerificationReportView(
       node(
         'p',
         'nearai-report-description',
-        'Verification results are provided by the calling application’s NEAR AI inference SDK. This view does not run independent verification.',
+        'Verification results are provided by the embedding application.',
       ),
     );
-    content.append(
+    const help = node('details', 'nearai-report-description');
+    help.append(
+      node('summary', '', 'About verification'),
       node(
         'p',
-        'nearai-report-description',
-        reports.some(
-          (report) =>
-            report.attestation?.deploymentProvenance === 'not_checked',
-        )
-          ? 'Verified hardware evidence and signing keys do not establish that this is an approved deployment of the named model. Deployment measurements were not checked against a trusted allowlist.'
-          : 'Deployment approval is shown only when it was checked by the calling application’s policy.',
+        '',
+        'This view displays supplied results without independently verifying them. Gateway verification alone does not establish model execution in a TEE. Deployment approval requires a trusted deployment policy.',
       ),
     );
-    if (reports.length)
+    content.append(help);
+    const verifiedAt = reports.find((report) => report.verifiedAt)?.verifiedAt;
+    if (verifiedAt)
       content.append(
         node(
           'p',
           'nearai-report-description',
-          `Verification time: ${reports.find((report) => report.verifiedAt)?.verifiedAt ?? 'Not provided by the SDK'}.`,
+          `Verification time: ${verifiedAt}`,
         ),
       );
     heading.append(content);
@@ -410,7 +409,7 @@ export function createVerificationReportView(
     const modelField = node('div');
     modelField.append(
       node('div', 'nearai-report-label', 'Model'),
-      node('div', 'nearai-report-model', model ?? 'Not provided by the SDK'),
+      node('div', 'nearai-report-model', model ?? ''),
     );
     const brands = node('div', 'nearai-report-brands');
     brands.append(vendor('nvidia'), vendor('intel'));
@@ -437,11 +436,11 @@ export function createVerificationReportView(
     if (reply) {
       const receipt = node('section', 'nearai-report-card nearai-report-stack');
       receipt.append(
-        node('h3', '', 'Reply signature'),
+        node('h3', '', 'Response signature'),
         node(
           'p',
           'nearai-report-description',
-          'The calling application’s SDK checks the reply signature against the original request and response bytes. This display does not receive chat content or recompute hashes.',
+          'Signature verification results.',
         ),
       );
       const checks = node('ul', 'nearai-report-checks');
@@ -453,8 +452,8 @@ export function createVerificationReportView(
         positive ? 'pass' : 'unknown',
         positive
           ? `${signature?.signer.signingAlgo.toUpperCase()} signature is valid`
-          : 'Reply signature verification not established',
-        'Reported by the calling application’s SDK.',
+          : 'Response signature verification not established',
+        undefined,
       );
       const signed =
         signature &&
@@ -478,7 +477,7 @@ export function createVerificationReportView(
           : 'Signer verification not established',
         reply.scope === 'gateway'
           ? 'A Gateway signature alone does not prove the model ran in a TEE.'
-          : 'The signer binding is reported by the calling application’s SDK.',
+          : undefined,
       );
       receipt.append(checks);
       const values = node(
@@ -579,23 +578,6 @@ export function createVerificationReportView(
     );
     hardware.append(tabs, ...panels);
     root.append(hardware);
-    const raw = accordion(root, 'Report details');
-    const json = node(
-      'pre',
-      'nearai-report-json',
-      reports.length
-        ? JSON.stringify(reports.length === 1 ? reports[0] : reports, null, 2)
-        : '',
-    );
-    json.dataset.field = 'report';
-    raw.append(json);
-    root.append(
-      node(
-        'p',
-        'nearai-report-footer',
-        'Displays the calling application’s SDK report without independently verifying it.',
-      ),
-    );
   }
 
   function setReports(reports: readonly VerificationReport[]) {

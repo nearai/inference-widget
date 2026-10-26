@@ -1,3 +1,5 @@
+import { observe } from './observe';
+observe();
 import { fileURLToPath } from 'node:url';
 import { expect, test } from '@playwright/test';
 
@@ -14,13 +16,13 @@ test('opens the SDK reply report and restores focus on Escape', async ({
   await trigger.click();
   const frame = page.frameLocator('iframe');
   await expect(frame.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await expect(frame.locator('[data-field="summary"]')).toContainText(
-    'Not provided by the SDK',
+    'Verification results are provided by the embedding application.',
   );
   await expect(frame.locator('[data-field="evidence"]')).toContainText(
-    'approval not checked',
+    'Approval not checked',
   );
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).not.toBeVisible();
@@ -29,7 +31,7 @@ test('opens the SDK reply report and restores focus on Escape', async ({
   await trigger.click();
   await expect(
     page.frameLocator('iframe').locator('[data-field="status"]'),
-  ).toHaveText('Reply verified');
+  ).toHaveText('Response verified');
 });
 
 test('shows missing reply context without falling back to model verification', async ({
@@ -38,7 +40,7 @@ test('shows missing reply context without falling back to model verification', a
   await page.locator('#missing button').click();
   const frame = page.frameLocator('iframe');
   await expect(frame.locator('[data-field="status"]')).toHaveText(
-    'Unable to verify reply',
+    'Unable to verify response',
   );
   await expect(frame.locator('[data-field="error"]')).toContainText(
     'no retained record',
@@ -48,7 +50,7 @@ test('shows missing reply context without falling back to model verification', a
   );
 });
 
-test('updates the trigger when an iframe-requested verification finishes after closing', async ({
+test('closing a refresh ignores its late result and permits a fresh verification', async ({
   page,
 }) => {
   await page.evaluate(async () => {
@@ -87,7 +89,7 @@ test('updates the trigger when an iframe-requested verification finishes after c
   });
   const viewer = page.frameLocator('iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await viewer
     .getByRole('button', { name: 'Verify again', exact: true })
@@ -100,15 +102,20 @@ test('updates the trigger when an iframe-requested verification finishes after c
   await page
     .getByRole('button', { name: 'Complete verification', exact: true })
     .click();
-  await expect(page.locator('#close-refresh button')).toHaveText('Verified');
+  await expect(page.locator('#close-refresh button')).toHaveText(
+    'Verify response',
+  );
   await expect(page.locator('iframe')).toHaveCount(0);
   await page.locator('#close-refresh button').click();
+  await page
+    .getByRole('button', { name: 'Complete verification', exact: true })
+    .dispatchEvent('click');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await expect(page.locator('#close-refresh')).toHaveAttribute(
     'data-calls',
-    '2',
+    '3',
   );
 });
 
@@ -143,7 +150,7 @@ test('refreshes the reply report in the existing iframe and updates the trigger 
   });
   const viewer = page.frameLocator('iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   const source = await page.locator('iframe').getAttribute('src');
   await viewer
@@ -164,7 +171,7 @@ test('passes existing reports and model provider reports to the viewer', async (
   await page.locator('#report button').click();
   await expect(
     page.frameLocator('iframe').locator('[data-field="status"]'),
-  ).toHaveText('Reply verified');
+  ).toHaveText('Response verified');
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('#model button').click();
   await expect(
@@ -329,10 +336,9 @@ test('rejects spoofed sources, times out and reloads without repeating verificat
         origin: url.origin,
         source: window,
         data: {
-          type: 'nearai:ready',
-          protocolVersion: 1,
-          instanceId: url.searchParams.get('instanceId'),
-          requestId: url.searchParams.get('requestId'),
+          type: 'NEAR_AI_VERIFICATION_CENTER_READY',
+          version: 1,
+          requestId: frame.dataset.requestId,
         },
       }),
     );
@@ -379,15 +385,38 @@ test('destroys all owned elements and blocks future operations', async ({
   );
 });
 
-test('receiving frame rejects a disallowed parent', async ({ page }) => {
+test('receiving viewer rejects a report from an untrusted origin', async ({
+  page,
+}) => {
   await page.evaluate(() => {
     const frame = document.createElement('iframe');
-    frame.src =
-      'http://127.0.0.1:4174/embed.html?parentOrigin=https%3A%2F%2Funtrusted.invalid&instanceId=test&requestId=test';
+    frame.src = 'http://127.0.0.1:4174/embed.html';
     document.body.append(frame);
   });
-  await expect(page.frameLocator('iframe').getByRole('status')).toContainText(
-    'Unable to connect',
+  const viewer = page.frameLocator('iframe');
+  await expect(viewer.locator('[data-field="status"]')).toHaveText(
+    'Waiting for a report...',
+  );
+  const child = page
+    .frames()
+    .find((frame) => frame.url().startsWith('http://127.0.0.1:4174/'));
+  if (!child) throw new Error('Missing iframe');
+  await child.evaluate(() =>
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        source: parent,
+        origin: 'https://untrusted.invalid',
+        data: {
+          type: 'NEAR_AI_VERIFICATION_REPORT',
+          version: 1,
+          requestId: document.documentElement.dataset.requestId,
+          reports: [],
+        },
+      }),
+    ),
+  );
+  await expect(viewer.locator('[data-field="status"]')).toHaveText(
+    'Waiting for a report...',
   );
 });
 
@@ -539,7 +568,7 @@ test('binds existing reports to the built-in status button without verifying aga
   await button.click();
   await expect(
     page.frameLocator('iframe').locator('[data-field="status"]'),
-  ).toHaveText('Reply verified');
+  ).toHaveText('Response verified');
   await page.locator('#update-report').dispatchEvent('click');
   await expect(button).toHaveAttribute('data-status', 'failed');
   await expect(button).toHaveText('Verification failed');
@@ -548,7 +577,7 @@ test('binds existing reports to the built-in status button without verifying aga
   ).toHaveText('The SDK rejected this signature.');
 });
 
-test('updates verification after closing and dismisses cached details through the backdrop', async ({
+test('closing cancels obsolete verification and preserves backdrop dismissal after retry', async ({
   page,
 }) => {
   await page.evaluate(async () => {
@@ -591,13 +620,14 @@ test('updates verification after closing and dismisses cached details through th
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.locator('html')).toHaveCSS('overflow', 'auto');
   await page.locator('#finish-background').click();
-  await expect(button).toHaveText('Verified');
+  await expect(button).toHaveText('Verify response');
   await expect(page.locator('iframe')).toHaveCount(0);
   await button.click();
+  await page.locator('#finish-background').dispatchEvent('click');
   await expect(
     page.frameLocator('iframe').locator('[data-field="status"]'),
-  ).toHaveText('Reply verified');
-  await expect(page.locator('body')).toHaveAttribute('data-sdk-calls', '1');
+  ).toHaveText('Response verified');
+  await expect(page.locator('body')).toHaveAttribute('data-sdk-calls', '2');
   await page.mouse.click(5, 5);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('html')).toHaveCSS('overflow', 'auto');
@@ -726,7 +756,7 @@ test('recovers the trigger and report refresh when the viewer fails during verif
   await button.click();
   const viewer = page.frameLocator('iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await viewer.getByRole('button', { name: 'Verify again' }).click();
   await expect(button).toHaveText('Verifying');
@@ -735,16 +765,14 @@ test('recovers the trigger and report refresh when the viewer fails during verif
     .find((frame) => frame.url().includes('/embed.html?'));
   if (!child) throw new Error('Missing verification viewer');
   await child.evaluate(() => {
-    const params = new URLSearchParams(location.search);
     parent.postMessage(
       {
-        protocolVersion: 1,
-        type: 'nearai:error',
+        version: 1,
+        type: 'NEAR_AI_VERIFICATION_ERROR',
         message: 'private-viewer-error',
-        instanceId: params.get('instanceId'),
-        requestId: params.get('requestId'),
+        requestId: document.documentElement.dataset.requestId,
       },
-      params.get('parentOrigin') ?? '',
+      'http://127.0.0.1:4173',
     );
   });
   await expect(button).toHaveText('Unable to verify');
@@ -756,7 +784,7 @@ test('recovers the trigger and report refresh when the viewer fails during verif
   );
   await page.getByRole('button', { name: 'Reload verification page' }).click();
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await expect(button).toHaveText('Verified');
   await page.locator('#finish-failed-viewer').dispatchEvent('click');
@@ -804,7 +832,7 @@ test('a mixed report collection refreshes the displayed reply regardless of repo
   });
   const viewer = page.frameLocator('iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
   await viewer.getByRole('button', { name: 'Verify again' }).click();
   await expect(page.locator('body')).toHaveAttribute(
@@ -815,7 +843,7 @@ test('a mixed report collection refreshes the displayed reply regardless of repo
     'data-refreshed-model',
   );
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Reply verified',
+    'Response verified',
   );
 });
 
@@ -865,7 +893,7 @@ test('updating the displayed report changes the reply used for subsequent verifi
   );
 });
 
-test('a verification timeout updates the trigger after the dialog was closed', async ({
+test('a closed verification timeout cannot update the trigger', async ({
   page,
 }) => {
   await page.clock.install();
@@ -888,6 +916,6 @@ test('a verification timeout updates the trigger after the dialog was closed', a
   await button.click();
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.clock.fastForward(1001);
-  await expect(button).toHaveText('Unable to verify');
+  await expect(button).toHaveText('Verify response');
   await expect(page.locator('iframe')).toHaveCount(0);
 });

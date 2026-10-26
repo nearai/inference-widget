@@ -2,6 +2,7 @@ import {
   createVerificationFrame,
   verificationFrameUrl,
   type VerificationFrame,
+  type VerificationRequestContext,
 } from './frame';
 import { createIcon } from './icons';
 import {
@@ -29,10 +30,17 @@ export type VerificationWidgetOptions = {
   container?: HTMLElement;
   target?: VerificationTarget;
   theme?: 'light' | 'dark';
+  showHeader?: boolean;
   reports?: readonly VerificationReport[];
   getModelReport?: (
     model: string,
+    context: VerificationRequestContext,
   ) => Promise<VerificationReport | readonly VerificationReport[]>;
+  getResponseReports?: (
+    completionId: string,
+    context: VerificationRequestContext,
+  ) => Promise<readonly VerificationReport[]>;
+  onError?: (error: unknown) => void;
   loadTimeoutMs?: number;
   verificationTimeoutMs?: number;
 };
@@ -80,8 +88,14 @@ export function createVerificationWidget(
     throw new TypeError('loadTimeoutMs must be positive.');
   const verificationTimeout =
     options.verificationTimeoutMs ?? DEFAULT_VERIFICATION_TIMEOUT_MS;
-  if (!Number.isFinite(verificationTimeout) || verificationTimeout <= 0)
-    throw new TypeError('verificationTimeoutMs must be positive.');
+  if (
+    !Number.isFinite(verificationTimeout) ||
+    verificationTimeout <= 0 ||
+    verificationTimeout > 54_000
+  )
+    throw new TypeError(
+      'verificationTimeoutMs must be positive and at most 54000 ms.',
+    );
   if (options.container && !options.target)
     throw new TypeError('A button container requires a target.');
   if (window.location.origin === 'null')
@@ -148,12 +162,15 @@ export function createVerificationWidget(
   ) => {
     if (!button) return;
     const labels = {
-      idle: options.target?.kind === 'model' ? 'Verify model' : 'Verify reply',
+      idle:
+        options.target?.kind === 'model' ? 'Verify model' : 'Verify response',
       pending: 'Verifying',
       verified: 'Verified',
-      partial: cachedReports?.every((report) => report.scope === 'gateway')
-        ? 'Gateway verified'
-        : 'Partially verified',
+      partial:
+        options.target?.kind !== 'reply' &&
+        cachedReports?.every((report) => report.scope === 'gateway')
+          ? 'Gateway verified'
+          : 'Partially verified',
       failed: 'Verification failed',
       unverifiable: 'Unable to verify',
     };
@@ -189,6 +206,10 @@ export function createVerificationWidget(
     }
   };
   const close = () => {
+    version += 1;
+    verification?.abort();
+    if (button?.dataset.status === 'pending')
+      renderButton(cachedReports ? verificationStatus(cachedReports) : 'idle');
     releaseSession();
     if (dialog.open) dialog.close();
     button?.setAttribute('aria-expanded', 'false');
@@ -251,7 +272,9 @@ export function createVerificationWidget(
     session = current;
     content.append(frame);
     const refreshTarget: VerificationTarget | undefined =
-      target.kind === 'reply' && target.completionId && options.client
+      target.kind === 'reply' &&
+      target.completionId &&
+      (options.client || options.getResponseReports)
         ? { kind: 'reply', completionId: target.completionId }
         : target.kind === 'model' && target.model && options.getModelReport
           ? { kind: 'model', model: target.model }
@@ -260,8 +283,9 @@ export function createVerificationWidget(
       iframe: frame,
       verifyUrl: options.verifyUrl,
       theme: options.theme,
+      showHeader: options.showHeader,
       loadTimeoutMs: timeout,
-      verificationTimeoutMs: verificationTimeout,
+      verificationTimeoutMs: verificationTimeout + 1_000,
       onClose: close,
       getReports: refreshTarget
         ? async () => {
@@ -392,7 +416,11 @@ export function createVerificationWidget(
           ];
         const getModelReport = options.getModelReport;
         const result = await withVerificationTimeout(
-          () => getModelReport(target.model),
+          () =>
+            getModelReport(target.model, {
+              signal: controller.signal,
+              timeoutMs: Math.max(1, verificationTimeout - 1_000),
+            }),
           verificationTimeout,
           controller.signal,
         );
@@ -411,6 +439,31 @@ export function createVerificationWidget(
           );
         return reports;
       }
+      if (options.getResponseReports) {
+        const getReports = options.getResponseReports;
+        const reports = parseVerificationReports(
+          await withVerificationTimeout(
+            () =>
+              getReports(target.completionId, {
+                signal: controller.signal,
+                timeoutMs: Math.max(1, verificationTimeout - 1_000),
+              }),
+            verificationTimeout,
+            controller.signal,
+          ),
+        );
+        if (
+          !reports.some(
+            (report) =>
+              report.kind === 'reply' &&
+              report.completionId === target.completionId,
+          )
+        )
+          throw new TypeError(
+            'Response reports must include the requested completion.',
+          );
+        return reports;
+      }
       if (!options.client)
         return [
           {
@@ -419,7 +472,8 @@ export function createVerificationWidget(
             scope: 'unknown',
             status: 'unverifiable',
             error: {
-              message: 'Provide the original SDK client to verify this reply.',
+              message:
+                'Provide the original SDK client to verify this response.',
             },
           },
         ];
@@ -433,6 +487,7 @@ export function createVerificationWidget(
         throw new Error('The SDK returned a different completion.');
       return [reportFromResult(result)];
     } catch (error) {
+      options.onError?.(error);
       return [reportFromError(error, target)];
     } finally {
       if (verification === controller) verification = undefined;
@@ -498,7 +553,9 @@ export function createVerificationWidget(
     if (!dialog.open) close();
   };
   const onReload = () => {
-    session?.connection?.reload();
+    if (!session) return;
+    if (session.reports?.length) openReports(session.reports);
+    else void openTarget(session.target);
   };
   const onBackdropClick = (event: MouseEvent) => {
     if (event.target !== dialog) return;

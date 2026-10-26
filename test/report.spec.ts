@@ -33,7 +33,11 @@ test('keeps Gateway reply verification partial', () => {
   const report = reportFromResult({
     ...exampleResult,
     signatureKind: 'gateway',
-    signature: { ...exampleResult.signature, kind: 'gateway' },
+    signature: {
+      ...exampleResult.signature,
+      kind: 'gateway',
+      signedText: `${'22'.repeat(32)}:${'33'.repeat(32)}`,
+    },
     attestation: { ...exampleResult.attestation, tlsBinding: { kind: 'none' } },
   });
   expect(report.status).toBe('partial');
@@ -315,7 +319,7 @@ test('rejects mixed models, different replies and an oversized combined report',
       exampleReport,
       { ...exampleReport, completionId: 'another-reply' },
     ]),
-  ).toThrow('same reply');
+  ).toThrow('same response');
   const large = {
     ...exampleReport,
     attestation: {
@@ -402,7 +406,7 @@ test.each([
   [404, 'Model metadata', 'model_metadata', '/v1/'],
   [401, 'Gateway attestation', 'gateway_attestation', 'API key'],
   [403, 'Model attestation', 'model_attestation', 'permissions'],
-  [429, 'Reply signature', 'completion_signature', 'rate limited'],
+  [429, 'Response signature', 'completion_signature', 'rate limited'],
   [503, 'Verification service', 'unknown', 'unavailable'],
 ])(
   'explains HTTP %s without copying sensitive server details',
@@ -496,3 +500,63 @@ test.each([401, 402, 429, 500])(
     expect(JSON.stringify(report)).not.toMatch(/private-/);
   },
 );
+
+test('omits raw deployment configuration by default and includes it only on explicit request', () => {
+  expect(
+    reportFromResult(exampleResult).attestation?.deployment.appCompose,
+  ).toBeUndefined();
+  expect(
+    reportFromResult(exampleResult, { includeDeploymentConfiguration: true })
+      .attestation?.deployment.appCompose,
+  ).toBe(exampleResult.attestation.deployment.appCompose);
+  expect(
+    parseVerificationReport({
+      ...exampleReport,
+      attestation: {
+        ...exampleResult.attestation,
+        deployment: {
+          runtimeMeasurements:
+            exampleResult.attestation.deployment.runtimeMeasurements,
+        },
+      },
+    }).attestation?.deployment.appCompose,
+  ).toBeUndefined();
+});
+
+test.each(['invalid', `${'22'.repeat(32)}:${'33'.repeat(32)}:extra`])(
+  'rejects malformed positive Gateway signatures: %s',
+  (signedText) => {
+    expect(() =>
+      reportFromResult({
+        ...exampleResult,
+        signatureKind: 'gateway',
+        signature: { ...exampleResult.signature, kind: 'gateway', signedText },
+        attestation: {
+          ...exampleResult.attestation,
+          tlsBinding: { kind: 'none' },
+        },
+      }),
+    ).toThrow();
+  },
+);
+
+test('projects SDK results before transport without credentials, chat content or unknown fields', () => {
+  const result = {
+    ...exampleResult,
+    apiKey: 'private-test-key',
+    request: { messages: ['private-chat'] },
+    attestation: {
+      ...exampleResult.attestation,
+      token: 'private-attestation-token',
+      deployment: {
+        ...exampleResult.attestation.deployment,
+        appCompose: 'private-configuration',
+      },
+    },
+  };
+  const report = reportFromResult(result);
+  expect(report.status).toBe('verified');
+  expect(JSON.stringify(report)).not.toMatch(
+    /private-|appCompose|apiKey|messages/,
+  );
+});

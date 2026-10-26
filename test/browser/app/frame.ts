@@ -14,7 +14,7 @@ const connection = createVerificationFrame({
   verifyUrl: 'http://127.0.0.1:4174/embed.html',
   reports: [exampleReport],
   verificationTimeoutMs: Number(
-    new URLSearchParams(location.search).get('verification-timeout') ?? 60_000,
+    new URLSearchParams(location.search).get('verification-timeout') ?? 46_000,
   ),
   async getReports() {
     calls += 1;

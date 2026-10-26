@@ -8,99 +8,50 @@ export function element<T extends HTMLElement = HTMLElement>(id: string): T {
   if (!value) throw new Error(`Missing example element: ${id}`);
   return value as T;
 }
-
-export const configuration = element<HTMLFormElement>('configuration');
-export const verifyUrl = new URL('/embed.html', window.location.origin).href;
-
-const storageKey = 'nearai-verification-example:configuration';
-const storageStatus = element('configuration-storage-status');
-const inputs = Array.from(configuration.querySelectorAll('input'));
-const savedMessage =
-  'Configuration, including the API key, is saved for this tab. Changing it clears previous results.';
-
-const baseUrlInput = configuration.elements.namedItem(
-  'baseUrl',
-) as HTMLInputElement;
-baseUrlInput.defaultValue = new URL('/cloud/v1/', window.location.origin).href;
-
-try {
-  const saved: unknown = JSON.parse(sessionStorage.getItem(storageKey) ?? '{}');
-  if (saved && typeof saved === 'object') {
-    for (const input of inputs) {
-      const value = (saved as Record<string, unknown>)[input.name];
-      if (typeof value === 'string') input.value = value;
-    }
-  }
-} catch {
-  storageStatus.textContent = 'Saved configuration could not be restored.';
-}
-
-function saveConfiguration() {
-  try {
-    sessionStorage.setItem(
-      storageKey,
-      JSON.stringify(
-        Object.fromEntries(inputs.map((input) => [input.name, input.value])),
-      ),
+export const input = (id: string) => element<HTMLInputElement>(id);
+export const form = element<HTMLFormElement>('configuration');
+export function endpoint(value: string): URL {
+  const url = new URL(value);
+  if (
+    url.username ||
+    url.password ||
+    url.hash ||
+    (url.protocol !== 'https:' &&
+      !(
+        url.protocol === 'http:' &&
+        ['localhost', '127.0.0.1'].includes(url.hostname)
+      ))
+  )
+    throw new TypeError(
+      'Use trusted HTTPS URLs or HTTP localhost, without credentials or fragments.',
     );
-    storageStatus.textContent = savedMessage;
-  } catch {
-    storageStatus.textContent =
-      'Configuration could not be saved. Values stay in memory.';
-  }
+  return url;
 }
-configuration.addEventListener('input', saveConfiguration);
-
-configuration.addEventListener('reset', () => {
-  try {
-    sessionStorage.removeItem(storageKey);
-    storageStatus.textContent = savedMessage;
-  } catch {
-    storageStatus.textContent = 'Saved configuration could not be cleared.';
-  }
-});
-
-function normalizeCloudBaseUrl() {
-  const input = configuration.elements.namedItem('baseUrl') as HTMLInputElement;
-  try {
-    const url = new URL(input.value);
-    if (
-      ['cloud-api.near.ai', 'cloud-stg-api.near.ai'].includes(url.hostname) &&
-      url.pathname === '/' &&
-      !url.search &&
-      !url.hash
-    ) {
-      url.pathname = '/v1/';
-      input.value = url.href;
-      return true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}
-
-if (normalizeCloudBaseUrl()) saveConfiguration();
-
 export function readConfiguration() {
-  if (!configuration.reportValidity()) return;
-  if (normalizeCloudBaseUrl()) saveConfiguration();
-  const values = new FormData(configuration);
-  const value = (name: string) => String(values.get(name) ?? '').trim();
+  if (!form.reportValidity()) return;
+  const viewer = endpoint(input('viewer-url').value.trim());
+  const api = endpoint(input('api-url').value.trim());
+  if (
+    ['cloud-api.near.ai', 'cloud-stg-api.near.ai'].includes(api.hostname) &&
+    api.pathname === '/'
+  )
+    api.pathname = '/v1';
+  // A Cloud UI deployment supplies these public verification services. Existing apps keep their own SDK configuration.
+  const verifiers = {
+    tdxQuote: createTdxQuoteVerifier({
+      pccsUrl: new URL('/api/proxy/pccs', viewer).href,
+    }),
+    gpuEvidence: createGpuEvidenceVerifier({
+      nrasUrl: new URL('/api/proxy/nras/v3/attest/gpu', viewer).href,
+      jwksUrl: new URL('/api/proxy/nras/.well-known/jwks.json', viewer).href,
+    }),
+  };
   return {
-    apiKey: value('apiKey'),
-    baseUrl: value('baseUrl'),
-    model: value('model'),
-    verifiers: {
-      tdxQuote: createTdxQuoteVerifier({
-        pccsUrl: new URL('/pccs', window.location.origin).href,
-      }),
-      gpuEvidence: createGpuEvidenceVerifier({
-        nrasUrl: '/nras/v3/attest/gpu',
-        jwksUrl: '/nras/.well-known/jwks.json',
-      }),
-    },
+    verifyUrl: viewer.href,
+    theme: input('dark-mode').checked ? ('dark' as const) : ('light' as const),
+    showHeader: input('show-header').checked,
+    model: input('model').value.trim(),
+    connection: { baseUrl: api.href, apiKey: input('api-key').value.trim() },
+    verifiers,
   };
 }
-
-configuration.addEventListener('submit', (event) => event.preventDefault());

@@ -12,7 +12,7 @@ const view = createVerificationReportView({
       ? () => connection.requestReports()
       : undefined,
   theme:
-    new URLSearchParams(window.location.search).get('theme') === 'dark'
+    new URLSearchParams(window.location.search).get('darkMode') === 'true'
       ? 'dark'
       : 'light',
 });
@@ -22,6 +22,7 @@ try {
   connection = connectVerificationFrame({
     allowedParentOrigins: [window.location.origin, 'http://127.0.0.1:4173'],
     onReports: (reports) => view.setReports(reports),
+    onPending: () => view.clear(),
   });
   window.addEventListener('pagehide', (event) => {
     if (event.persisted) return;

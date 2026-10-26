@@ -10,9 +10,15 @@ import type {
 
 export const MAX_REPORT_BYTES = 1024 * 1024;
 
-export type AttestationDetails =
-  | VerifiedModelAttestation
-  | VerifiedGatewayAttestation;
+type DisplayDeployment = Omit<
+  VerifiedAttestationEvidence['deployment'],
+  'appCompose'
+> & { appCompose?: string };
+
+export type AttestationDetails = (
+  | Omit<VerifiedModelAttestation, 'deployment'>
+  | Omit<VerifiedGatewayAttestation, 'deployment'>
+) & { deployment: DisplayDeployment };
 
 export type VerificationReport = {
   schemaVersion: 1;
@@ -95,15 +101,16 @@ function attestation(
   const measurements = object(deployment.runtimeMeasurements);
   if (!Array.isArray(input.advisoryIds) || input.advisoryIds.length > 1000)
     invalid();
-  const output: VerifiedAttestationEvidence &
-    Partial<
+  const output: Omit<VerifiedAttestationEvidence, 'deployment'> & {
+    deployment: DisplayDeployment;
+  } & Partial<
       Pick<VerifiedModelAttestation, 'gpuEvidence' | 'signingPublicKey'>
     > = {
     signer: signer(input.signer, readString),
     tcbStatus: choice(input.tcbStatus, tcbStatuses) as TcbStatus,
     advisoryIds: Array.from(input.advisoryIds, readString),
     deployment: {
-      appCompose: readString(deployment.appCompose),
+      appCompose: optionalString(deployment.appCompose, readString),
       runtimeMeasurements: {
         osImageHash: optionalString(measurements.osImageHash, readString),
         composeHash: optionalString(measurements.composeHash, readString),
@@ -141,8 +148,8 @@ export function parseVerificationReport(value: unknown): VerificationReport {
   let stringBytes = 0;
   const readString: ReadString = (value) => {
     const parsed = string(value);
-    // Bound supported strings before constructing the complete report. The
-    // final check also counts keys, enum values and JSON punctuation.
+    // Bound parsed strings before building the full report; the final check
+    // also counts property names, enum values and JSON punctuation.
     stringBytes += new TextEncoder().encode(JSON.stringify(parsed)).length;
     if (stringBytes > MAX_REPORT_BYTES)
       throw new RangeError('Verification report exceeds 1 MiB.');
@@ -229,6 +236,8 @@ export function parseVerificationReport(value: unknown): VerificationReport {
         )
           invalid();
         report.model = signedModel;
+      } else if (!/^[a-f0-9]{64}:[a-f0-9]{64}$/i.test(signature.signedText)) {
+        invalid();
       }
     }
   }
@@ -263,7 +272,7 @@ export function parseVerificationReports(value: unknown): VerificationReport[] {
         .map((report) => report.completionId),
     ).size > 1
   ) {
-    throw new TypeError('Reports must refer to the same reply.');
+    throw new TypeError('Reports must refer to the same response.');
   }
   return reports;
 }

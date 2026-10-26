@@ -201,7 +201,10 @@ test('collects SDK-verified Gateway and every replica with raw evidence and supp
     verifiers: { deployment },
   };
   input.gatewayVerification = { policy: { acceptedTcbStatuses: ['UpToDate'] } };
-  const reports = await verifyModelReports(input);
+  const reports = await verifyModelReports({
+    ...input,
+    includeRawEvidence: true,
+  });
   expect(reports.map((report) => [report.scope, report.status])).toEqual([
     ['gateway', 'partial'],
     ['model', 'verified'],
@@ -246,11 +249,8 @@ test('does not request model evidence for an unsupported model or promote Gatewa
   const reports = await verifyModelReports(input);
   expect(input.client.fetchModelAttestations).not.toHaveBeenCalled();
   expect(verifyModel).not.toHaveBeenCalled();
-  expect(reports.map((report) => report.status)).toEqual([
-    'partial',
-    'unverifiable',
-  ]);
-  expect(verificationStatus(reports)).toBe('unverifiable');
+  expect(reports.map((report) => report.status)).toEqual(['partial']);
+  expect(verificationStatus(reports)).toBe('partial');
 });
 
 test('reports missing replicas and authentication failures without losing their scope', async () => {
@@ -293,4 +293,13 @@ test('keeps the required GPU default when an optional policy value is undefined'
       ([params]) => params.policy?.gpuEvidence === 'required',
     ),
   ).toBe(true);
+});
+
+test('keeps raw evidence and deployment configuration out of default model reports', async () => {
+  const reports = await verifyModelReports(options());
+  expect(reports).toHaveLength(3);
+  for (const report of reports) {
+    expect(report.evidence).toBeUndefined();
+    expect(report.attestation?.deployment.appCompose).toBeUndefined();
+  }
 });

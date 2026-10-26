@@ -21,7 +21,7 @@ type Props = Omit<VerificationWidgetOptions, 'container' | 'target'> & {
 };
 
 export function VerificationButton({
-  client, target, verifyUrl, getModelReport, reports, theme, loadTimeoutMs,
+  client, target, verifyUrl, getModelReport, getResponseReports, reports, theme, showHeader, onError, loadTimeoutMs,
   verificationTimeoutMs,
 }: Props) {
   const host = useRef<HTMLSpanElement>(null);
@@ -37,6 +37,9 @@ export function VerificationButton({
       target: kind === 'reply' ? { kind, completionId: id } : { kind, model: id },
       verifyUrl,
       getModelReport,
+      getResponseReports,
+      showHeader,
+      onError,
       theme,
       loadTimeoutMs,
       verificationTimeoutMs,
@@ -46,11 +49,11 @@ export function VerificationButton({
       widget.destroy();
       instance.current = null;
     };
-  }, [client, kind, id, verifyUrl, getModelReport, theme, loadTimeoutMs, verificationTimeoutMs]);
+  }, [client, kind, id, verifyUrl, getModelReport, getResponseReports, theme, showHeader, onError, loadTimeoutMs, verificationTimeoutMs]);
 
   useEffect(() => {
     instance.current?.setReports(reports ?? []);
-  }, [reports, client, kind, id, verifyUrl, getModelReport, theme, loadTimeoutMs, verificationTimeoutMs]);
+  }, [reports, client, kind, id, verifyUrl, getModelReport, getResponseReports, theme, showHeader, onError, loadTimeoutMs, verificationTimeoutMs]);
 
   return <span ref={host} />;
 }
@@ -66,7 +69,7 @@ Pass the original SDK client that generated the completion:
 />
 ```
 
-If the application already verified the reply, memoize its adapted reports
+If the application already verified the response, memoize its adapted reports
 inside your component:
 
 ```tsx
@@ -129,7 +132,7 @@ For a standalone verification page, call `verifyModelReports()` from your
 existing load/retry handler and pass its returned array to
 `<VerificationReports reports={reports} onReverify={runVerification} />`.
 Clear the reports when configuration changes and ignore results from obsolete
-requests, as shown in `examples/verify-page.ts`.
+requests using an AbortController or a local request sequence.
 
 ## A caller-owned iframe
 
@@ -139,5 +142,5 @@ and use `createVerificationFrame()` instead of `createVerificationWidget()` in
 the same two-effect pattern. It accepts `iframe: host.current`, `verifyUrl`,
 `theme` and an optional stable `getReports` callback. Update it with
 `connection.setReports(reports)` and call `connection.destroy()` during cleanup.
-See [the JS iframe example](../README.md#embed-your-own-iframe) and
+See [the JS iframe example](../README.md#direct-iframe-and-inline-views) and
 [the frame protocol](protocol.md).
