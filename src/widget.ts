@@ -5,6 +5,7 @@ import {
   type VerificationRequestContext,
 } from './frame';
 import { createIcon } from './icons';
+import { verificationPresentation } from './presentation';
 import {
   parseVerificationReports,
   verificationStatus,
@@ -161,28 +162,28 @@ export function createVerificationWidget(
     state: VerificationReport['status'] | 'pending' | 'idle',
   ) => {
     if (!button) return;
+    const gatewayOnly = Boolean(
+      cachedReports && verificationPresentation(cachedReports).gatewayOnly,
+    );
     const labels = {
       idle:
         options.target?.kind === 'model' ? 'Verify model' : 'Verify response',
       pending: 'Verifying',
       verified: 'Verified',
-      partial:
-        options.target?.kind !== 'reply' &&
-        cachedReports?.every((report) => report.scope === 'gateway')
-          ? 'Gateway verified'
-          : 'Partially verified',
+      partial: gatewayOnly ? 'Gateway verified' : 'Partially verified',
       failed: 'Verification failed',
       unverifiable: 'Unable to verify',
     };
     const icon =
       state === 'pending'
         ? 'pending'
-        : state === 'verified'
+        : state === 'verified' || (state === 'partial' && gatewayOnly)
           ? 'verified'
           : state === 'failed' || state === 'partial'
             ? 'alert'
             : 'shield';
     button.dataset.status = state;
+    button.dataset.scope = gatewayOnly ? 'gateway' : 'model';
     button.replaceChildren(
       createIcon(icon),
       document.createTextNode(labels[state]),

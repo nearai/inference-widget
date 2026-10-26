@@ -64,7 +64,7 @@ for (const [label, action] of Object.entries({
         schemaVersion: 1,
         kind: 'model',
         model: 'demo-model',
-        scope: 'unknown',
+        scope: 'model',
         status: 'failed',
         error: {
           code: 'quote.verification_failed',

@@ -87,7 +87,7 @@ test('real SDK rejects invalid quotes for every advertised replica', async ({
   await page.getByRole('button', { name: 'Verify model', exact: true }).click();
   const viewer = page.frameLocator('dialog iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Verification failed',
+    'Verification needs attention',
   );
   await viewer
     .getByRole('tab', { name: 'Model Verification', exact: true })

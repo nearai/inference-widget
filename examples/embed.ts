@@ -4,24 +4,36 @@ import '@nearai/inference-widget/styles.css';
 
 const container = document.querySelector<HTMLElement>('#viewer');
 if (!container) throw new Error('The report container is missing.');
-const view = createVerificationReportView({
-  container,
-  onReverify:
-    new URLSearchParams(window.location.search).get('canRequestReports') ===
-    'true'
-      ? () => connection.requestReports()
-      : undefined,
-  theme:
-    new URLSearchParams(window.location.search).get('darkMode') === 'true'
-      ? 'dark'
-      : 'light',
-});
-
+const params = new URLSearchParams(location.search);
+document.body.dataset.theme =
+  params.get('darkMode') === 'true' ? 'dark' : 'light';
+function createView(sourceOrigin?: string) {
+  if (!container) throw new Error('The report container is missing.');
+  return createVerificationReportView({
+    container,
+    sourceOrigin,
+    modelLabel: params.get('model') || undefined,
+    onReverify:
+      params.get('canRequestReports') === 'true'
+        ? () => connection.requestReports()
+        : undefined,
+    theme: params.get('darkMode') === 'true' ? 'dark' : 'light',
+  });
+}
+let view = createView();
+let sourceOrigin = '';
 let connection: ReturnType<typeof connectVerificationFrame>;
 try {
   connection = connectVerificationFrame({
-    allowedParentOrigins: [window.location.origin, 'http://127.0.0.1:4173'],
-    onReports: (reports) => view.setReports(reports),
+    allowedParentOrigins: [location.origin, 'http://127.0.0.1:4173'],
+    onReports(reports, origin) {
+      if (sourceOrigin !== origin) {
+        view.destroy();
+        sourceOrigin = origin;
+        view = createView(origin);
+      }
+      view.setReports(reports);
+    },
     onPending: () => view.clear(),
   });
   window.addEventListener('pagehide', (event) => {

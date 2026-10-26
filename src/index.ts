@@ -33,3 +33,5 @@ export {
   type VerificationReportView,
   type VerificationReportViewOptions,
 } from './report-view';
+
+export { attachVerificationEvidence } from './evidence';

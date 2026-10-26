@@ -30,6 +30,7 @@ export function endpoint(value: string): URL {
 export function readConfiguration() {
   if (!form.reportValidity()) return;
   const viewer = endpoint(input('viewer-url').value.trim());
+  viewer.searchParams.set('model', input('model').value.trim());
   const api = endpoint(input('api-url').value.trim());
   if (
     ['cloud-api.near.ai', 'cloud-stg-api.near.ai'].includes(api.hostname) &&
@@ -53,5 +54,6 @@ export function readConfiguration() {
     model: input('model').value.trim(),
     connection: { baseUrl: api.href, apiKey: input('api-key').value.trim() },
     verifiers,
+    includeRawEvidence: input('include-evidence').checked,
   };
 }

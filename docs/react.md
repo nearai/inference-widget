@@ -88,6 +88,11 @@ reports, or with `reports` to display existing Gateway and replica results.
 Keep SDK clients and report-provider callbacks stable with the application's
 existing client ownership and `useCallback` or `useMemo` where appropriate.
 
+For full Response, Gateway and replica details, provide a stable
+`getResponseReports` callback as shown in the [JavaScript example](../README.md#complete-response-reports).
+It uses the original clients and explicitly collects evidence; rendering does
+not add requests. The same callback runs on Verify Again.
+
 ## Inline report view
 
 ```tsx
@@ -100,10 +105,12 @@ import {
   type VerificationReportView,
 } from '@nearai/inference-widget';
 
-export function VerificationReports({ reports, onReverify, theme = 'light' }: {
+export function VerificationReports({ reports, onReverify, theme = 'light', sourceOrigin, modelLabel }: {
   reports: readonly VerificationReport[];
   onReverify?: () => void;
   theme?: 'light' | 'dark';
+  sourceOrigin?: string;
+  modelLabel?: string;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const instance = useRef<VerificationReportView | null>(null);
@@ -111,18 +118,18 @@ export function VerificationReports({ reports, onReverify, theme = 'light' }: {
   useEffect(() => {
     if (!host.current) return;
     const view = createVerificationReportView({
-      container: host.current, onReverify, theme,
+      container: host.current, onReverify, theme, sourceOrigin, modelLabel,
     });
     instance.current = view;
     return () => {
       view.destroy();
       instance.current = null;
     };
-  }, [onReverify, theme]);
+  }, [onReverify, theme, sourceOrigin, modelLabel]);
 
   useEffect(() => {
     instance.current?.setReports(reports);
-  }, [reports, onReverify, theme]);
+  }, [reports, onReverify, theme, sourceOrigin, modelLabel]);
 
   return <div ref={host} />;
 }

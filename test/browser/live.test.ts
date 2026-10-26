@@ -42,10 +42,15 @@ for (const [kind, model] of [
       kind === 'Private Hosted' ? 'Model verified' : 'Gateway verified',
       { timeout: 55_000 },
     );
-    await viewer
-      .getByRole('tab', { name: 'Gateway Verification', exact: true })
-      .click();
-    await expect(viewer.getByRole('tabpanel')).toContainText('Verified');
+    if (kind === 'Private Hosted')
+      await viewer
+        .getByRole('tab', { name: 'Gateway Verification', exact: true })
+        .click();
+    await expect(
+      viewer
+        .getByRole('button', { name: 'Copy Signing address', exact: true })
+        .last(),
+    ).toBeVisible();
     await page.screenshot({ path: info.outputPath('live-model.png') });
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     if (metadata.metadata?.isReady === false) {
@@ -67,26 +72,34 @@ for (const [kind, model] of [
       .getByRole('button', { name: 'Verify response', exact: true })
       .click();
     const title =
-      kind === 'Private Hosted'
-        ? 'Response verified'
-        : 'Response partially verified';
+      kind === 'Private Hosted' ? 'Response verified' : 'Gateway verified';
     await expect(viewer.getByRole('heading', { level: 1 })).toHaveText(title, {
       timeout: 55_000,
     });
+    if (kind === 'Private Hosted')
+      await viewer
+        .getByRole('tab', { name: 'Gateway Verification', exact: true })
+        .click();
+    await expect(
+      viewer
+        .getByRole('button', { name: 'Copy Signing address', exact: true })
+        .last(),
+    ).toBeVisible();
     await viewer
-      .getByRole('tab', { name: 'Gateway Verification', exact: true })
-      .click();
-    await expect(viewer.getByRole('tabpanel')).toContainText('Verified');
-    await viewer
-      .getByRole('button', { name: 'Verify again', exact: true })
+      .getByRole('button', { name: 'Verify Again', exact: true })
       .click();
     await expect(viewer.getByRole('heading', { level: 1 })).toHaveText(title, {
       timeout: 55_000,
     });
-    await viewer
-      .getByRole('tab', { name: 'Gateway Verification', exact: true })
-      .click();
-    await expect(viewer.getByRole('tabpanel')).toContainText('Verified');
+    if (kind === 'Private Hosted')
+      await viewer
+        .getByRole('tab', { name: 'Gateway Verification', exact: true })
+        .click();
+    await expect(
+      viewer
+        .getByRole('button', { name: 'Copy Signing address', exact: true })
+        .last(),
+    ).toBeVisible();
     expect(inference).toBe(1);
     const display = await viewer.locator('body').innerText();
     expect(display.includes(key ?? '')).toBe(false);

@@ -1,13 +1,9 @@
 import '@nearai/inference-widget/styles.css';
 import './example.css';
-import {
-  AttestationClient,
-  InferenceClient,
-  verifyGatewayAttestation,
-} from '@nearai/inference-sdk';
+import { AttestationClient, InferenceClient } from '@nearai/inference-sdk';
 import {
   createVerificationWidget,
-  reportFromAttestation,
+  attachVerificationEvidence,
   reportFromError,
   reportFromResult,
   verifyModelReports,
@@ -69,6 +65,7 @@ element('model-verification').addEventListener('click', () => {
         gatewayVerification: { verifiers: config.verifiers },
         modelVerification: { verifiers: config.verifiers },
         verificationTimeoutMs: context.timeoutMs,
+        includeRawEvidence: config.includeRawEvidence,
       }),
   });
   void modelWidget.openModel(config.model);
@@ -141,6 +138,7 @@ form.addEventListener('submit', async (event) => {
       id: string,
       context: VerificationRequestContext,
     ): Promise<VerificationReport[]> => {
+      const expiresAt = Date.now() + context.timeoutMs;
       const deadline = AbortSignal.any([
         context.signal,
         AbortSignal.timeout(context.timeoutMs),
@@ -153,30 +151,22 @@ form.addEventListener('submit', async (event) => {
       } catch (error) {
         return [reportFromError(error, { kind: 'reply', completionId: id })];
       }
-      if (reports[0].scope === 'model') {
-        try {
-          const fetched = await wait(
-            attestationClient.fetchGatewayAttestation({
-              signingAlgo: 'ed25519',
-            }),
-            deadline,
-          );
-          const attestation = await wait(
-            verifyGatewayAttestation({
-              ...fetched,
-              verifiers: config.verifiers,
-            }),
-            deadline,
-          );
-          reports.push(
-            reportFromAttestation({ model: config.model, attestation }),
-          );
-        } catch (error) {
-          reports.push({
-            ...reportFromError(error, { kind: 'model', model: config.model }),
-            scope: 'gateway',
-          });
-        }
+      try {
+        deadline.throwIfAborted();
+        const environment = await verifyModelReports({
+          client: attestationClient,
+          model: config.model,
+          signingAlgo: 'ed25519',
+          gatewayVerification: { verifiers: config.verifiers },
+          modelVerification: { verifiers: config.verifiers },
+          verificationTimeoutMs: Math.max(1, expiresAt - Date.now() - 250),
+          includeRawEvidence: config.includeRawEvidence,
+        });
+        reports = attachVerificationEvidence(reports, environment);
+      } catch (error) {
+        reports.push(
+          reportFromError(error, { kind: 'model', model: config.model }),
+        );
       }
       return reports;
     };

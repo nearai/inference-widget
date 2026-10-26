@@ -20,13 +20,13 @@ test('production example initializes and renders through the production viewer',
     'Unable to verify',
   );
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Unable to verify',
   );
   await viewer
-    .getByRole('tab', { name: 'Model Verification', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .press('Escape');
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   await page.getByLabel('Message', { exact: true }).fill('hello');

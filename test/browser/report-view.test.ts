@@ -90,7 +90,7 @@ test('replaces reports, clears obsolete evidence and rejects invalid updates wit
     .getByRole('button', { name: 'Set failed report', exact: true })
     .click();
   await expect(report.locator('[data-field="status"]')).toHaveText(
-    'Verification failed',
+    'Verification needs attention',
   );
   await expect(report.locator('[data-field="error"]')).toContainText(
     'quote.verification_failed',
@@ -169,7 +169,7 @@ test('matches Cloud UI tabs, keyboard navigation, expandable evidence, copying a
   ).toHaveText('Copied');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('00');
   await report
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(page.locator('#report')).toHaveAttribute(
     'data-reverified',
@@ -186,7 +186,7 @@ test('a failed model replica remains failed when Gateway and other model evidenc
   const report = page.locator('#report .nearai-verification-report');
   await expect(report).toHaveAttribute('data-status', 'failed');
   await expect(report.locator('[data-field="status"]')).toHaveText(
-    'Verification failed',
+    'Verification needs attention',
   );
   await expect(report.locator('[data-field="error"]')).toContainText(
     'Another replica failed',

@@ -19,7 +19,7 @@ test('opens the SDK reply report and restores focus on Escape', async ({
     'Response verified',
   );
   await expect(frame.locator('[data-field="summary"]')).toContainText(
-    'Verification results are provided by the embedding application.',
+    'Verification results from http://127.0.0.1:4173.',
   );
   await expect(frame.locator('[data-field="evidence"]')).toContainText(
     'Approval not checked',
@@ -40,14 +40,13 @@ test('shows missing reply context without falling back to model verification', a
   await page.locator('#missing button').click();
   const frame = page.frameLocator('iframe');
   await expect(frame.locator('[data-field="status"]')).toHaveText(
-    'Unable to verify response',
+    'Unable to verify',
   );
   await expect(frame.locator('[data-field="error"]')).toContainText(
     'no retained record',
   );
-  await expect(frame.locator('[data-field="summary"]')).toContainText(
-    'expired-completion',
-  );
+  await expect(frame.locator('[data-field="response"]')).toHaveCount(0);
+  await expect(frame.locator('[data-field="hardware"]')).toHaveCount(0);
 });
 
 test('closing a refresh ignores its late result and permits a fresh verification', async ({
@@ -92,7 +91,7 @@ test('closing a refresh ignores its late result and permits a fresh verification
     'Response verified',
   );
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(page.locator('#close-refresh')).toHaveAttribute(
     'data-calls',
@@ -154,10 +153,10 @@ test('refreshes the reply report in the existing iframe and updates the trigger 
   );
   const source = await page.locator('iframe').getAttribute('src');
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Verification failed',
+    'Verification needs attention',
   );
   await expect(page.locator('#refresh-reply button')).toHaveText(
     'Verification failed',
@@ -175,7 +174,7 @@ test('passes existing reports and model provider reports to the viewer', async (
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('#model button').click();
   await expect(
-    page.frameLocator('iframe').locator('[data-field="summary"]'),
+    page.frameLocator('iframe').locator('[data-field="hardware-section"]'),
   ).toContainText('demo-model');
 });
 
@@ -238,7 +237,7 @@ test('passes Gateway and all replicas through the model callback and existing-re
   });
   const viewer = page.frameLocator('iframe');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
-    'Verification failed',
+    'Verification needs attention',
   );
   await expect(page.locator('#collection button')).toHaveText(
     'Verification failed',
@@ -704,7 +703,7 @@ for (const kind of ['reply', 'model'] as const) {
     await expect(viewer.locator('[data-field="error"]')).toContainText(
       'Verification timed out. Try again.',
     );
-    await viewer.getByRole('button', { name: 'Verify again' }).click();
+    await viewer.getByRole('button', { name: 'Verify Again' }).click();
     await expect(button).toHaveText('Verified');
     await page.locator('#finish-timed-verification').dispatchEvent('click');
     await expect(button).toHaveText('Verified');
@@ -758,7 +757,7 @@ test('recovers the trigger and report refresh when the viewer fails during verif
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Response verified',
   );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(button).toHaveText('Verifying');
   const child = page
     .frames()
@@ -834,7 +833,7 @@ test('a mixed report collection refreshes the displayed reply regardless of repo
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Response verified',
   );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('body')).toHaveAttribute(
     'data-refreshed-reply',
     'demo-completion',
@@ -883,7 +882,7 @@ test('updating the displayed report changes the reply used for subsequent verifi
   await expect(viewer.locator('[data-field="summary"]')).toContainText(
     'reply-b',
   );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('body')).toHaveAttribute(
     'data-refreshed-reply',
     'reply-b',

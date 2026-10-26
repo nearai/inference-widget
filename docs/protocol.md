@@ -29,7 +29,8 @@ There is one reports payload shape. A single report still uses an array:
 ```
 
 No credentials, reports or parent-generated routing IDs belong in the viewer URL.
-`darkMode`, `showHeader`, `canRequestReports` and `canClose` accept `true` or
+`model` is optional display context, used only when reports omit a model. It is
+not a signed model claim. `darkMode`, `showHeader`, `canRequestReports` and `canClose` accept `true` or
 `false`. Widget helpers explicitly set capabilities. Refresh and close default
 to disabled for a bare iframe. `showHeader` defaults may depend on the viewer;
 set it explicitly when appearance matters.
@@ -88,7 +89,9 @@ dialogs and dismissible popovers inside the viewer consume Escape first.
 Destroying either connection removes its listeners and timers.
 
 A viewer response timeout produces a generic error and invalidates the request.
-The parent must offer reload/retry. No SDK error text, API key or chat content is
+The parent must offer reload/retry. Only the current closing correlation is
+retained after a report error or timeout so Escape can still close the host;
+obsolete report deliveries remain invalid. No SDK error text, API key or chat content is
 sent automatically. A malicious parent can supply fabricated reports: the viewer
 is a display surface, not an independent verification authority.
 
@@ -116,10 +119,11 @@ analytics and support scripts on the embedded surface.
 import { connectVerificationFrame } from '@nearai/inference-widget/protocol';
 const connection = connectVerificationFrame({
   allowedParentOrigins: ['https://your-application.example'],
-  onReports: reports => view.setReports(reports),
+  onReports: (reports, origin) => renderReports(reports, origin),
   onPending: () => view.clear(),
   onError: message => showError(message),
 });
+// renderReports may pass the validated origin as the report view's sourceOrigin.
 // Wire view's optional reverify handler to connection.requestReports().
 // connection.destroy() on teardown.
 ```

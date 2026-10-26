@@ -13,10 +13,11 @@ export async function mockSdk(page: Page, provider = 'vllm') {
     const result = privateModel ? base : { ...base, signatureKind: 'gateway', signature: {
       ...base.signature, kind: 'gateway', signedText: base.signature.signedText.split(':').slice(-2).join(':'),
     }, attestation: { ...base.attestation, tlsBinding: { kind: 'none' } } };
+    const raw = { signer: base.attestation.signer, intelQuote: 'fixture-quote', nonce: 'aa', eventLog: [], appCompose: 'fixture-configuration', nvidiaPayload: '{}' };
     export class AttestationClient {
       async fetchModelMetadata() { return { providerType: ${JSON.stringify(provider)}, attestationSupported: privateModel }; }
-      async fetchGatewayAttestation() { calls.gateway++; return { attestation: {} }; }
-      async fetchModelAttestations() { return { attestations: [{}, {}] }; }
+      async fetchGatewayAttestation() { calls.gateway++; return { attestation: raw }; }
+      async fetchModelAttestations() { return { attestations: [raw, raw] }; }
     }
     export class InferenceClient {
       constructor(options) { calls.options = options; }
@@ -54,9 +55,10 @@ for (const provider of ['vllm', 'external', 'chutes']) {
     await expect(viewer.locator('[data-field="status"]')).toHaveText(
       provider === 'vllm' ? 'Model verified' : 'Gateway verified',
     );
-    await viewer
-      .getByRole('tab', { name: 'Gateway Verification', exact: true })
-      .click();
+    if (provider === 'vllm')
+      await viewer
+        .getByRole('tab', { name: 'Gateway Verification', exact: true })
+        .click();
     await expect(
       viewer
         .getByRole('button', { name: 'Copy Signing address', exact: true })
@@ -70,25 +72,27 @@ for (const provider of ['vllm', 'external', 'chutes']) {
       .getByRole('button', { name: 'Verify response', exact: true })
       .click();
     await expect(viewer.locator('[data-field="status"]')).toHaveText(
-      provider === 'vllm' ? 'Response verified' : 'Response partially verified',
+      provider === 'vllm' ? 'Response verified' : 'Gateway verified',
     );
-    await viewer
-      .getByRole('tab', { name: 'Gateway Verification', exact: true })
-      .click();
+    if (provider === 'vllm')
+      await viewer
+        .getByRole('tab', { name: 'Gateway Verification', exact: true })
+        .click();
     await expect(
       viewer
         .getByRole('button', { name: 'Copy Signing address', exact: true })
         .last(),
     ).toBeVisible();
     await viewer
-      .getByRole('button', { name: 'Verify again', exact: true })
+      .getByRole('button', { name: 'Verify Again', exact: true })
       .click();
     await expect(viewer.locator('[data-field="status"]')).toHaveText(
-      provider === 'vllm' ? 'Response verified' : 'Response partially verified',
+      provider === 'vllm' ? 'Response verified' : 'Gateway verified',
     );
-    await viewer
-      .getByRole('tab', { name: 'Gateway Verification', exact: true })
-      .click();
+    if (provider === 'vllm')
+      await viewer
+        .getByRole('tab', { name: 'Gateway Verification', exact: true })
+        .click();
     await expect(
       viewer
         .getByRole('button', { name: 'Copy Signing address', exact: true })
@@ -126,7 +130,62 @@ for (const provider of ['vllm', 'external', 'chutes']) {
     await page.getByLabel('Model', { exact: true }).fill('another-model');
     await page.locator('#response-verification button').click();
     await expect(viewer.locator('[data-field="status"]')).toHaveText(
-      provider === 'vllm' ? 'Response verified' : 'Response partially verified',
+      provider === 'vllm' ? 'Response verified' : 'Gateway verified',
     );
+  });
+}
+
+for (const detailed of [false, true]) {
+  test(`example includes raw evidence only after explicit selection: ${detailed}`, async ({
+    page,
+  }) => {
+    await mockSdk(page);
+    await page.addInitScript(() =>
+      window.addEventListener('message', (event) => {
+        if (event.data?.type === 'NEAR_AI_VERIFICATION_REPORT')
+          document.documentElement.dataset.receivedReport = JSON.stringify(
+            event.data.reports,
+          );
+      }),
+    );
+    await page.goto('/');
+    await page
+      .getByLabel('Viewer URL')
+      .fill('http://127.0.0.1:4174/embed.html');
+    await page.getByLabel('API key', { exact: true }).fill('synthetic-key');
+    await page.getByLabel('Model', { exact: true }).fill('demo-model');
+    await expect(
+      page.getByLabel('Include detailed hardware evidence'),
+    ).not.toBeChecked();
+    await page
+      .getByLabel('Include detailed hardware evidence')
+      .setChecked(detailed);
+    await page
+      .getByLabel('Message', { exact: true })
+      .fill('private-example-message');
+    await page
+      .getByRole('button', { name: 'Send message', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: 'Verify response', exact: true })
+      .click();
+    const viewer = page.frameLocator('dialog iframe');
+    await expect(viewer.locator('[data-field="status"]')).toHaveText(
+      'Response verified',
+    );
+    const child = page
+      .frames()
+      .find((frame) => frame.url().startsWith('http://127.0.0.1:4174/'));
+    if (!child) throw new Error('Missing viewer');
+    const payload = await child.evaluate(
+      () => document.documentElement.dataset.receivedReport ?? '',
+    );
+    expect(payload.includes('fixture-quote')).toBe(detailed);
+    expect(payload.includes('appCompose')).toBe(detailed);
+    expect(payload).not.toContain('synthetic-key');
+    expect(payload).not.toContain('private-example-message');
+    expect(
+      await page.evaluate(() => [localStorage.length, sessionStorage.length]),
+    ).toEqual([0, 0]);
   });
 }

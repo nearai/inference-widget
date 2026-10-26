@@ -70,7 +70,7 @@ test('real widget parent exchanges full response collections with Cloud UI, refr
     viewer.getByText('Response signature', { exact: true }),
   ).toBeVisible();
   await expect(
-    viewer.getByText('Report source:', { exact: false }),
+    viewer.getByText('Verification results from', { exact: false }),
   ).toContainText('127.0.0.1:4173');
   await expect(viewer.getByText('Report details', { exact: true })).toHaveCount(
     0,
@@ -83,10 +83,10 @@ test('real widget parent exchanges full response collections with Cloud UI, refr
     .click();
   await expect(viewer.getByRole('tabpanel')).toContainText('Verified');
   await expect(viewer.getByRole('tabpanel')).toContainText(
-    'Approval not checked',
+    'Measurements verified',
   );
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(page.locator('body')).toHaveAttribute(
     'data-response-calls',
@@ -157,14 +157,17 @@ test('Cloud UI hides reverify for static reports and shows Gateway-only and fail
     'Gateway verified',
   );
   await expect(
-    viewer.getByRole('button', { name: 'Verify again', exact: true }),
+    viewer.getByRole('button', { name: 'Verify Again', exact: true }),
   ).toHaveCount(0);
   await page.locator('#cloud-failed').dispatchEvent('click');
   await expect(viewer.getByRole('heading', { level: 1 })).toHaveText(
-    'Verification failed',
+    'Verification needs attention',
   );
+  await viewer
+    .getByRole('tab', { name: 'Model Verification', exact: true })
+    .click();
   await expect(
-    viewer.getByRole('alert').filter({ hasText: 'Rejected replica' }),
+    viewer.getByText('Rejected replica', { exact: true }),
   ).toContainText('Rejected replica');
 });
 
@@ -195,7 +198,7 @@ test('production widget bundle can display reports in the real Cloud UI iframe',
     /synthetic-production-key/,
   );
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(viewer.getByRole('heading', { level: 1 })).toHaveText(
     'Unable to verify',
@@ -266,7 +269,7 @@ test('Cloud UI reload, clear and retry ignore obsolete callback results and mess
     .locator('#cloud-frame')
     .getAttribute('data-request-id');
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(page.locator('#cloud-state')).toHaveAttribute('data-calls', '1');
   await page.locator('#cloud-reload').click();
@@ -298,9 +301,10 @@ test('Cloud UI reload, clear and retry ignore obsolete callback results and mess
   );
   await expect(page.locator('#cloud-state')).toHaveText('refreshing');
   await page.locator('#cloud-finish-new').click();
+  await viewer.getByRole('button', { name: /^Response\s+Verified/ }).click();
   await expect(viewer.locator('body')).toContainText('fresh-2');
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(page.locator('#cloud-state')).toHaveText('error', {
     timeout: 5_000,
@@ -308,6 +312,7 @@ test('Cloud UI reload, clear and retry ignore obsolete callback results and mess
   await page.locator('#cloud-reload').click();
   await expect(page.locator('#cloud-state')).toHaveAttribute('data-calls', '4');
   await page.locator('#cloud-finish-new').click();
+  await viewer.getByRole('button', { name: /^Response\s+Verified/ }).click();
   await expect(viewer.locator('body')).toContainText('fresh-4');
   await page.locator('#cloud-clear').click();
   await expect(page.locator('#cloud-frame')).not.toHaveAttribute('src');
@@ -357,4 +362,54 @@ test('Cloud UI lets an internal modal consume Escape before closing the host dia
     .getByRole('tab', { name: 'Model Verification', exact: true })
     .press('Escape');
   await expect(page.locator('dialog[open]')).toHaveCount(0);
+});
+
+test('Cloud UI preserves Escape close correlation after report delivery times out', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.goto(parentUrl);
+  await page.evaluate(async (cloud) => {
+    const { createVerificationFrame } = (await import(
+      './api.ts' as string
+    )) as typeof import('../../src/index');
+    const iframe = document.createElement('iframe');
+    iframe.id = 'cloud-close-timeout';
+    document.body.append(iframe);
+    document.body.dataset.closedAfterTimeout = '0';
+    createVerificationFrame({
+      iframe,
+      verifyUrl: cloud,
+      onClose: () => {
+        document.body.dataset.closedAfterTimeout = '1';
+      },
+      onStateChange: (state) => {
+        document.body.dataset.timeoutState = state;
+      },
+    });
+  }, cloud);
+  await expect(page.locator('body')).toHaveAttribute(
+    'data-timeout-state',
+    'ready',
+  );
+  await page.clock.fastForward(60_001);
+  await expect(page.locator('body')).toHaveAttribute(
+    'data-timeout-state',
+    'error',
+  );
+  const child = page.frames().find((frame) => frame.url().startsWith(cloud));
+  if (!child) throw new Error('Missing Cloud UI viewer');
+  await child.evaluate(() => {
+    const button = document.createElement('button');
+    button.textContent = 'Focus timed out viewer';
+    document.body.append(button);
+  });
+  await page
+    .frameLocator('#cloud-close-timeout')
+    .getByRole('button', { name: 'Focus timed out viewer' })
+    .press('Escape');
+  await expect(page.locator('body')).toHaveAttribute(
+    'data-closed-after-timeout',
+    '1',
+  );
 });

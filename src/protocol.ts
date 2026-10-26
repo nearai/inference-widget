@@ -73,7 +73,7 @@ export type VerificationViewerConnection = {
 export function connectVerificationFrame(options: {
   allowedParentOrigins: readonly string[];
   onReport?: (report: VerificationReport) => void;
-  onReports?: (reports: VerificationReport[]) => void;
+  onReports?: (reports: VerificationReport[], origin: string) => void;
   onPending?: () => void;
   onError?: (message: string) => void;
 }): VerificationViewerConnection {
@@ -84,6 +84,7 @@ export function connectVerificationFrame(options: {
   const params = new URLSearchParams(window.location.search);
   let origin: string | undefined;
   let requestId = '';
+  let closeRequestId = '';
   let destroyed = false;
   let pending = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -92,7 +93,8 @@ export function connectVerificationFrame(options: {
       {
         type,
         version: PROTOCOL_VERSION,
-        requestId,
+        requestId:
+          type === VERIFICATION_MESSAGES.close ? closeRequestId : requestId,
         ...(message ? { message } : {}),
       },
       origin ?? '*',
@@ -102,6 +104,7 @@ export function connectVerificationFrame(options: {
       throw new Error('The verification viewer connection has been destroyed.');
     clearTimeout(timer);
     requestId = crypto.randomUUID();
+    closeRequestId = requestId;
     pending = true;
     options.onPending?.();
     timer = setTimeout(() => {
@@ -137,7 +140,7 @@ export function connectVerificationFrame(options: {
       if (!reports.length)
         throw new TypeError('At least one report is required.');
       origin = event.origin;
-      if (options.onReports) options.onReports(reports);
+      if (options.onReports) options.onReports(reports, origin);
       else if (reports.length === 1) options.onReport?.(reports[0]);
       else throw new Error('The viewer does not support multiple reports.');
       pending = false;

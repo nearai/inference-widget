@@ -34,7 +34,7 @@ test('embeds across origins without a dialog and requests updated reports from t
   const viewer = page.frameLocator('#viewer');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('#refresh-count')).toHaveText('0');
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Waiting for a report...',
@@ -67,7 +67,7 @@ test('ignores an obsolete refresh result after an application update and can cle
   page,
 }) => {
   const viewer = page.frameLocator('#viewer');
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page
     .getByRole('button', { name: 'Replace report', exact: true })
@@ -94,7 +94,7 @@ test('reload replaces the request and cancels obsolete work', async ({
   const previous = await page
     .locator('#viewer')
     .getAttribute('data-request-id');
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page.getByRole('button', { name: 'Reload frame', exact: true }).click();
   await expect(page.locator('#viewer')).not.toHaveAttribute(
@@ -131,7 +131,7 @@ test('destroy removes message handling and ignores the result of pending work', 
   page,
 }) => {
   const viewer = page.frameLocator('#viewer');
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page
     .getByRole('button', { name: 'Destroy connection', exact: true })
@@ -153,7 +153,7 @@ test('keeps an application update made inside the report callback', async ({
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Response verified',
   );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page
     .getByRole('button', { name: 'Finish refresh', exact: true })
@@ -167,7 +167,7 @@ test('can recover a rejected refresh by reloading without displaying the old suc
   page,
 }) => {
   const viewer = page.frameLocator('#viewer');
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page
     .getByRole('button', { name: 'Reject refresh', exact: true })
@@ -200,7 +200,7 @@ test('times out a pending provider, ignores its late result and retries after re
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Response verified',
   );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page.clock.fastForward(1001);
   await expect(page.locator('#frame-state')).toHaveText('error');
@@ -237,7 +237,7 @@ test('an application report update cancels the pending verification deadline', a
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Response verified',
   );
-  await viewer.getByRole('button', { name: 'Verify again' }).click();
+  await viewer.getByRole('button', { name: 'Verify Again' }).click();
   await expect(page.locator('#refresh-count')).toHaveText('1');
   await page
     .getByRole('button', { name: 'Replace report', exact: true })

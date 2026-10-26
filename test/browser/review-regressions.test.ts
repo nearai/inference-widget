@@ -129,6 +129,8 @@ for (const kind of ['reply', 'model'] as const) {
         { kind, replacement },
       );
       const viewer = page.frameLocator('dialog iframe');
+      if (kind === 'reply')
+        await viewer.locator('[data-field="response"] > summary').click();
       await expect(viewer.getByText('B', { exact: true })).toBeVisible();
       await expect(page.locator('#bound button')).toHaveAttribute(
         'data-status',
@@ -187,13 +189,14 @@ test('Escape closes the modal after a cross-origin viewer refresh and restores f
     'Response verified',
   );
   await viewer
-    .getByRole('button', { name: 'Verify again', exact: true })
+    .getByRole('button', { name: 'Verify Again', exact: true })
     .click();
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Response verified',
   );
   await viewer
-    .getByRole('tab', { name: 'Model Verification', exact: true })
+    .getByRole('button', { name: 'Copy Signing address', exact: true })
+    .first()
     .press('Escape');
   await expect(page.locator('dialog[open]')).toHaveCount(0);
   await expect(page.locator('iframe')).toHaveCount(0);
@@ -301,7 +304,8 @@ test('close messages require readiness, the exact sender and current routing, an
     });
   });
   await child
-    .getByRole('tab', { name: 'Model Verification', exact: true })
+    .getByRole('button', { name: 'Copy Signing address', exact: true })
+    .first()
     .press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-close-calls', '0');
   // A persisted pagehide preserves the viewer and its key handler.
@@ -310,7 +314,8 @@ test('close messages require readiness, the exact sender and current routing, an
     dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
   });
   await child
-    .getByRole('tab', { name: 'Model Verification', exact: true })
+    .getByRole('button', { name: 'Copy Signing address', exact: true })
+    .first()
     .press('Escape');
   await expect(page.locator('body')).toHaveAttribute('data-close-calls', '1');
   // A real teardown removes the viewer's key handler as well.

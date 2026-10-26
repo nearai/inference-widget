@@ -244,7 +244,8 @@ for (const kind of ['modal', 'shadow-modal', 'nonmodal'] as const) {
       await expect(child.locator('#native-inner[open]')).toHaveCount(0);
       await expect(page.locator('dialog[open]')).toHaveCount(1);
       await viewer
-        .getByRole('tab', { name: 'Model Verification', exact: true })
+        .getByRole('button', { name: 'Copy Signing address', exact: true })
+        .first()
         .press('Escape');
     } else {
       // A nonmodal dialog has no native Escape dismissal to consume the key.
@@ -295,7 +296,8 @@ for (const kind of ['auto', 'shadow-auto', 'manual'] as const) {
       await expect(child.locator('#inner-popover:popover-open')).toHaveCount(0);
       await expect(page.locator('dialog[open]')).toHaveCount(1);
       await viewer
-        .getByRole('tab', { name: 'Model Verification', exact: true })
+        .getByRole('button', { name: 'Copy Signing address', exact: true })
+        .first()
         .press('Escape');
     }
     await expect(page.locator('dialog[open]')).toHaveCount(0);

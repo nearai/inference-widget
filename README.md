@@ -80,38 +80,47 @@ encryption, verification endpoints or policies.
 ## Complete response reports
 
 `client.verifyResponse()` normally returns evidence for its signature scope.
-To include separately verified Gateway hardware alongside a provider-signed
-response, provide one callback returning the full collection:
+Use one callback when the details should also include fresh Gateway hardware
+and all supported model replicas:
 
 ```js
-import { reportFromResult, reportFromError } from '@nearai/inference-widget';
+import {
+  attachVerificationEvidence, reportFromResult, verifyModelReports,
+} from '@nearai/inference-widget';
 
 const widget = createVerificationWidget({
   container, verifyUrl,
   target: { kind: 'reply', completionId },
   getResponseReports: async (id, { signal, timeoutMs }) => {
+    const expiresAt = Date.now() + timeoutMs;
     const response = reportFromResult(await client.verifyResponse(id));
-    if (response.scope === 'gateway') return [response];
-    try {
-      const gateway = await getVerifiedGatewayReport({ signal, timeoutMs });
-      return [response, gateway];
-    } catch (error) {
-      return [response, {
-        ...reportFromError(error, { kind: 'model', model: response.model }),
-        scope: 'gateway',
-      }];
-    }
+    signal.throwIfAborted();
+    const environment = await verifyModelReports({
+      client: attestationClient, model,
+      gatewayVerification: { verifiers },
+      modelVerification: { verifiers },
+      verificationTimeoutMs: Math.max(1, expiresAt - Date.now() - 250),
+    });
+    return attachVerificationEvidence([response], environment);
   },
 });
 ```
 
-`getVerifiedGatewayReport` is application code using the SDK and
-`reportFromAttestation()`. It must return normalized verification reports, classify SDK failures and
-observe the supplied cancellation/deadline. Reuse this callback for initial
-verification and Verify again; the widget will not also call `verifyResponse()`.
-Without it, the original-client path displays the single response result.
+Reuse the original clients and the same callback for initial verification and
+Verify Again; the widget will not also call `verifyResponse()`. Without this
+callback, the original-client path displays the single response result.
+`verifyModelReports()` returns classified failures and retains completed results
+when other checks time out. Observe the supplied signal and deadline when adding
+other operations.
+
+`attachVerificationEvidence()` is a pure adapter. It only attaches evidence when
+the scope, algorithm, signing address and both deployment measurements match.
+Model reports must also refer to the same signed model. Failed, unavailable,
+partial model and unmatched reports remain separate, so they still affect the
+aggregate verdict. Response signatures and statuses are preserved.
 A fresh Gateway report describes current hardware and does not establish that
-it signed or routed the original response.
+it signed or routed the original response. With a separate Gateway check, the
+original response's signing-key attestation stays in its Technical details.
 
 Existing results can be displayed without verifying again:
 
@@ -121,7 +130,7 @@ widget.openReports(reports); // Opens details immediately.
 widget.setReports([]); // Cancels pending work, clears results and closes details.
 ```
 
-Static reports have no Verify again button. Supply a matching verification
+Static reports have no Verify Again button. Supply a matching verification
 callback to enable fresh verification. Closing, switching targets, clearing,
 reloading or destroying a widget prevents obsolete results from updating it.
 `close()` preserves completed reports; `destroy()` removes owned DOM/listeners.
@@ -160,11 +169,23 @@ unloads it and removes listeners; the caller retains ownership of the iframe DOM
 For native `postMessage` integration without these helpers, see the
 [wire protocol](docs/protocol.md).
 
+Response cards start collapsed; hashes and response-bound Gateway attestation
+are under Technical details. A single hardware scope is shown directly. With
+both scopes, Model opens when verified model evidence is present; otherwise
+Gateway opens. Gateway-only results use a green Gateway verified heading while
+remaining `partial`; they do not attest model execution. Missing verification
+times are hidden. The packaged view keeps deployment approval explicit as
+Approval not checked when no approval policy was checked.
+
 For an inline report view:
 
 ```js
 import { createVerificationReportView } from '@nearai/inference-widget';
-const view = createVerificationReportView({ container, onReverify: refresh });
+const view = createVerificationReportView({
+  container, onReverify: refresh,
+  // Optional display context; never overrides a model bound by a signature.
+  modelLabel: model,
+});
 view.setReports(reports);
 // view.clear();
 // view.destroy();
@@ -213,6 +234,12 @@ in memory; Clear removes the key, conversation and verification contexts.
 Use trusted API and viewer URLs. Private Hosted, Incognito and Chutes select
 transport/signature settings explicitly in the demo; applications retain their
 own SDK choices. OpenAI requests use `max_completion_tokens`.
+
+The demo's optional Include detailed hardware evidence checkbox is off by
+default. Enabling it shares selected quotes, event logs, deployment configuration
+and NVIDIA payloads with the viewer after SDK checks. It does not change the
+package adapters' privacy defaults. The selected model is also passed as a
+`model` viewer query for display; this does not make Gateway signatures bind it.
 
 The demo uses the chosen Cloud UI deployment's public PCCS/NRAS/JWKS routes for
 verification. Those routes must be reachable from the parent origin; no proxy

@@ -198,7 +198,6 @@ export function createVerificationFrame(
   const receive = (event: MessageEvent<unknown>) => {
     if (
       destroyed ||
-      failed ||
       suspended ||
       event.origin !== url.origin ||
       event.source !== options.iframe.contentWindow ||
@@ -206,6 +205,15 @@ export function createVerificationFrame(
     )
       return;
     const message = event.data;
+    if (
+      ready &&
+      message.type === VERIFICATION_MESSAGES.close &&
+      message.requestId === requestId
+    ) {
+      options.onClose?.();
+      return;
+    }
+    if (failed) return;
     if (message.type === VERIFICATION_MESSAGES.ready) {
       if (seenRequests.has(message.requestId)) return;
       if (awaitingLoad) queuedReady = message.requestId;
@@ -220,8 +228,7 @@ export function createVerificationFrame(
       requestId = message.requestId;
       void refresh();
     } else if (ready && message.requestId === requestId) {
-      if (message.type === VERIFICATION_MESSAGES.close) options.onClose?.();
-      else if (message.type === VERIFICATION_MESSAGES.error)
+      if (message.type === VERIFICATION_MESSAGES.error)
         fail('The verification page could not display this report. Try again.');
     }
   };

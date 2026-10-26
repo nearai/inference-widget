@@ -1,15 +1,17 @@
 import { createIcon } from './icons';
 import {
-  parseVerificationReports,
-  verificationStatus,
-  type VerificationReport,
-} from './report';
+  hasVerifiedAttestation,
+  verificationPresentation,
+} from './presentation';
+import { parseVerificationReports, type VerificationReport } from './report';
 
 export type VerificationReportViewOptions = {
   container: HTMLElement;
   report?: VerificationReport;
   reports?: readonly VerificationReport[];
   theme?: 'light' | 'dark';
+  sourceOrigin?: string;
+  modelLabel?: string;
   onReverify?: () => void;
 };
 
@@ -98,27 +100,6 @@ export function createVerificationReportView(
     parent.append(field);
   }
 
-  function check(
-    parent: HTMLElement,
-    state: 'pass' | 'warn' | 'unknown',
-    title: string,
-    detail?: string,
-  ) {
-    const row = node('li', 'nearai-report-check');
-    row.dataset.state = state;
-    const mark = node(
-      'span',
-      'nearai-report-check-icon',
-      state === 'pass' ? '✓' : state === 'warn' ? '!' : 'i',
-    );
-    mark.setAttribute('aria-hidden', 'true');
-    const body = node('div');
-    body.append(node('div', 'nearai-report-check-title', title));
-    if (detail) body.append(node('p', 'nearai-report-description', detail));
-    row.append(mark, body);
-    parent.append(row);
-  }
-
   function accordion(
     parent: HTMLElement,
     title: string,
@@ -152,15 +133,9 @@ export function createVerificationReportView(
     parent.append(row);
   }
 
-  function attestationPane(
-    parent: HTMLElement,
-    report: VerificationReport,
-    replica?: number,
-  ) {
-    if (replica !== undefined)
-      parent.append(node('h4', '', `Model replica ${replica}`));
+  function attestationPane(parent: HTMLElement, report: VerificationReport) {
     const evidence = report.attestation;
-    if (!evidence) {
+    if (!hasVerifiedAttestation(report) || !evidence) {
       const error = node(
         'div',
         'nearai-report-error',
@@ -168,6 +143,7 @@ export function createVerificationReportView(
           'No verified hardware evidence was supplied for this scope.',
       );
       error.dataset.state = report.status;
+      error.dataset.field = 'error';
       if (report.error?.code)
         error.append(
           node('div', 'nearai-report-error-code', report.error.code),
@@ -205,15 +181,15 @@ export function createVerificationReportView(
     copyValue(pane, 'Signing address', evidence.signer.signingAddress);
     if ('signingPublicKey' in evidence)
       copyValue(pane, 'Signing public key', evidence.signingPublicKey);
-    if ('gpuEvidence' in evidence) {
+    if (report.scope === 'model' && 'gpuEvidence' in evidence) {
       const gpu = accordion(pane, 'GPU Attestation', 'nvidia');
       gpu.append(
         node(
           'p',
           'nearai-report-description',
           evidence.gpuEvidence === 'verified'
-            ? 'The calling application’s SDK verified the GPU evidence using NVIDIA attestation and signing keys.'
-            : 'GPU evidence was not provided by the SDK.',
+            ? 'The application’s SDK verified this GPU evidence.'
+            : 'GPU evidence was not provided.',
         ),
       );
       if (!report.evidence?.nvidiaPayload)
@@ -221,7 +197,7 @@ export function createVerificationReportView(
           node(
             'p',
             'nearai-report-description',
-            'Raw NVIDIA payload was not provided by the SDK.',
+            'Raw NVIDIA payload was not provided.',
           ),
         );
       references(gpu, [
@@ -318,104 +294,78 @@ export function createVerificationReportView(
 
   function render(reports: VerificationReport[]) {
     reset();
-    const modelReports = reports.filter((report) => report.scope !== 'gateway');
-    const gatewayReports = reports.filter(
-      (report) => report.scope === 'gateway',
-    );
-    const reply = reports.find((report) => report.kind === 'reply');
-    const model = reports.find((report) => report.model)?.model;
-    const state = verificationStatus(reports);
+    const {
+      state,
+      title: label,
+      response,
+      models,
+      gateways,
+      responseHardware,
+      gatewayOnly,
+    } = verificationPresentation(reports);
+    const model =
+      reports.find((report) => report.model)?.model ?? options.modelLabel;
     root.dataset.status = state;
+    root.dataset.tone =
+      state === 'verified' || gatewayOnly
+        ? 'positive'
+        : state === 'failed'
+          ? 'failure'
+          : 'neutral';
     const summary = node('div', 'nearai-report-stack');
     summary.dataset.field = 'summary';
-    const header = node('section', 'nearai-report-card');
-    const heading = node('div', 'nearai-report-heading');
-    const content = node('div');
-    const title = node('h2', 'nearai-report-title');
+    const header = node('section', 'nearai-report-card nearai-report-stack');
+    const title = node('h2', 'nearai-report-title', label);
     title.dataset.field = 'status';
     title.setAttribute('role', 'status');
     title.setAttribute('aria-live', 'polite');
-    title.append(
+    title.prepend(
       createIcon(
         state === 'pending'
           ? 'pending'
-          : state === 'verified'
+          : state === 'verified' || gatewayOnly
             ? 'verified'
-            : state === 'unverifiable'
-              ? 'shield'
-              : 'alert',
+            : state === 'failed'
+              ? 'alert'
+              : 'shield',
       ),
     );
-    title.append(
-      document.createTextNode(
-        state === 'pending'
-          ? 'Waiting for a report...'
-          : state === 'verified'
-            ? reply
-              ? 'Response verified'
-              : 'Model verified'
-            : state === 'partial'
-              ? reply
-                ? 'Response partially verified'
-                : reports.every((report) => report.scope === 'gateway')
-                  ? 'Gateway verified'
-                  : 'Model partially verified'
-              : state === 'failed'
-                ? 'Verification failed'
-                : reply
-                  ? 'Unable to verify response'
-                  : 'Unable to verify',
-      ),
-    );
-    content.append(
+    header.append(
       title,
       node(
         'p',
         'nearai-report-description',
-        'Verification results are provided by the embedding application.',
+        `Verification results from ${options.sourceOrigin || 'your application'}.`,
       ),
     );
+    if (gatewayOnly)
+      header.append(
+        node(
+          'p',
+          'nearai-report-description',
+          response
+            ? 'The Gateway environment and response signature are verified. Model execution is not attested.'
+            : 'The Gateway environment is verified. Model execution is not attested.',
+        ),
+      );
     const help = node('details', 'nearai-report-description');
     help.append(
       node('summary', '', 'About verification'),
       node(
         'p',
         '',
-        'This view displays supplied results without independently verifying them. Gateway verification alone does not establish model execution in a TEE. Deployment approval requires a trusted deployment policy.',
+        'Verification runs in the calling application. This viewer displays the reported results.',
+      ),
+      node(
+        'p',
+        '',
+        'Hardware verification checks the environment and signing keys. Software approval requires a separate check.',
       ),
     );
-    content.append(help);
-    const verifiedAt = reports.find((report) => report.verifiedAt)?.verifiedAt;
-    if (verifiedAt)
-      content.append(
-        node(
-          'p',
-          'nearai-report-description',
-          `Verification time: ${verifiedAt}`,
-        ),
-      );
-    heading.append(content);
-    if (options.onReverify) {
-      const retry = node('button', 'nearai-report-reverify', 'Verify again');
-      retry.prepend(createIcon('refresh'));
-      retry.type = 'button';
-      retry.disabled = reports.length === 0;
-      retry.addEventListener('click', options.onReverify, {
-        signal: events.signal,
-      });
-      heading.append(retry);
-    }
-    const meta = node('div', 'nearai-report-meta');
-    const modelField = node('div');
-    modelField.append(
-      node('div', 'nearai-report-label', 'Model'),
-      node('div', 'nearai-report-model', model ?? ''),
+    header.append(help);
+    const errors = reports.filter(
+      (report) => report.error && report.scope === 'unknown',
     );
-    const brands = node('div', 'nearai-report-brands');
-    brands.append(vendor('nvidia'), vendor('intel'));
-    meta.append(modelField, brands);
-    header.append(heading, meta);
-    const errors = reports.filter((report) => report.error);
     if (errors.length) {
       const error = node('div', 'nearai-report-error');
       error.dataset.field = 'error';
@@ -433,150 +383,181 @@ export function createVerificationReportView(
       header.append(error);
     }
     summary.append(header);
-    if (reply) {
-      const receipt = node('section', 'nearai-report-card nearai-report-stack');
-      receipt.append(
-        node('h3', '', 'Response signature'),
-        node(
-          'p',
-          'nearai-report-description',
-          'Signature verification results.',
-        ),
-      );
-      const checks = node('ul', 'nearai-report-checks');
+    if (response?.signature) {
+      const section = node('section', 'nearai-report-stack');
+      section.append(node('h3', '', 'Response signature'));
+      const card = node('details', 'nearai-report-response-card');
+      card.dataset.field = 'response';
       const positive =
-        reply.status === 'verified' || reply.status === 'partial';
-      const signature = reply.signature;
-      check(
-        checks,
-        positive ? 'pass' : 'unknown',
+        response.status === 'verified' || response.status === 'partial';
+      const badge = node(
+        'span',
+        'nearai-report-badge',
         positive
-          ? `${signature?.signer.signingAlgo.toUpperCase()} signature is valid`
-          : 'Response signature verification not established',
-        undefined,
+          ? 'Verified'
+          : response.status === 'failed'
+            ? 'Failed'
+            : 'Unavailable',
       );
-      const signed =
-        signature &&
-        /^(?:(.+):)?([a-f0-9]{64}):([a-f0-9]{64})$/i.exec(signature.signedText);
-      check(
-        checks,
-        positive && signed?.[1] && signed[1] === reply.model
-          ? 'pass'
-          : 'unknown',
-        signed?.[1]
-          ? `Signed for model ${signed[1]}`
-          : 'Signed model binding is not provided',
-      );
-      check(
-        checks,
-        positive ? (reply.scope === 'model' ? 'pass' : 'warn') : 'unknown',
-        positive
-          ? reply.scope === 'model'
-            ? 'Signer is an attested model TEE'
-            : 'Signed by the attested NEAR AI Gateway'
-          : 'Signer verification not established',
-        reply.scope === 'gateway'
-          ? 'A Gateway signature alone does not prove the model ran in a TEE.'
-          : undefined,
-      );
-      receipt.append(checks);
-      const values = node(
+      badge.dataset.status = positive ? 'verified' : response.status;
+      const cardHeading = node('summary', 'nearai-report-response-heading');
+      cardHeading.append(node('span', '', 'Response'), badge);
+      if (model)
+        cardHeading.append(node('span', 'nearai-report-response-model', model));
+      const body = node(
         'div',
-        'nearai-report-stack nearai-report-receipt-values',
+        'nearai-report-stack nearai-report-response-body',
       );
-      copyValue(values, 'Completion ID', reply.completionId);
-      copyValue(values, 'Signing address', signature?.signer.signingAddress);
-      copyValue(values, 'Request hash (SHA-256)', signed?.[2]);
-      copyValue(values, 'Response hash (SHA-256)', signed?.[3]);
-      copyValue(values, 'Signed message', signature?.signedText);
-      copyValue(values, 'Signature', signature?.signature);
-      receipt.append(values);
-      summary.append(receipt);
-    }
-    root.append(summary);
-    const hardware = node('section', 'nearai-report-card nearai-report-stack');
-    hardware.append(
-      node('h3', '', 'Hardware verification'),
-      node(
-        'p',
-        'nearai-report-description',
-        'Model and Gateway evidence is displayed separately. Only supplied SDK verification results are shown as verified.',
-      ),
-    );
-    const tabs = node('div', 'nearai-report-tabs');
-    tabs.setAttribute('role', 'tablist');
-    tabs.setAttribute('aria-label', 'Hardware verification');
-    const panels = [
-      node('div', 'nearai-report-stack'),
-      node('div', 'nearai-report-stack'),
-    ];
-    const buttons = ['Model Verification', 'Gateway Verification'].map(
-      (label, index) => {
-        const button = node('button', 'nearai-report-tab', label);
-        button.type = 'button';
-        button.id = `${id}-tab-${index}`;
-        button.setAttribute('role', 'tab');
-        button.setAttribute('aria-controls', `${id}-panel-${index}`);
-        panels[index].id = `${id}-panel-${index}`;
-        panels[index].setAttribute('role', 'tabpanel');
-        panels[index].setAttribute('aria-labelledby', button.id);
-        panels[index].tabIndex = 0;
-        tabs.append(button);
-        return button;
-      },
-    );
-    function select(index: number) {
-      buttons.forEach((button, position) => {
-        button.setAttribute('aria-selected', String(index === position));
-        button.tabIndex = index === position ? 0 : -1;
-        panels[position].hidden = index !== position;
-      });
-    }
-    buttons.forEach((button, index) => {
-      button.addEventListener('click', () => select(index), {
-        signal: events.signal,
-      });
-      button.addEventListener(
-        'keydown',
-        (event) => {
-          if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
-            return;
-          event.preventDefault();
-          const next =
-            event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index;
-          select(next);
-          buttons[next].focus();
-        },
-        { signal: events.signal },
-      );
-    });
-    for (const [index, group] of [modelReports, gatewayReports].entries()) {
-      if (!group.length)
-        panels[index].append(
+      const signature = response.signature;
+      if (positive) {
+        body.append(
+          node(
+            'p',
+            'nearai-report-positive',
+            `Verified ${signature.signer.signingAlgo.toUpperCase()} signature`,
+          ),
+        );
+        copyValue(body, 'Completion ID', response.completionId);
+        copyValue(body, 'Signing address', signature.signer.signingAddress);
+        copyValue(body, 'Signed message', signature.signedText);
+        copyValue(body, 'Signature', signature.signature);
+        const scope = node('dl', 'nearai-report-grid');
+        for (const [name, value] of Object.entries({
+          Algorithm: signature.signer.signingAlgo.toUpperCase(),
+          'Signature scope':
+            signature.kind === 'provider_tee' ? 'Model TEE' : 'Cloud gateway',
+        })) {
+          const field = node('div');
+          field.append(node('dt', '', name), node('dd', '', value));
+          scope.append(field);
+        }
+        body.append(scope);
+      } else
+        body.append(
           node(
             'p',
             'nearai-report-description',
-            reports.length
-              ? 'No verified evidence was supplied for this scope.'
-              : 'Waiting for a report...',
+            response.error?.message ??
+              'Signature verification not established.',
           ),
         );
-      group.forEach((report, replica) => {
-        attestationPane(
-          panels[index],
-          report,
-          group.length > 1 ? replica + 1 : undefined,
+      if (response.verifiedAt)
+        body.append(
+          node(
+            'p',
+            'nearai-report-description',
+            `Reported verification time: ${response.verifiedAt}`,
+          ),
+        );
+      const technical = node('details', 'nearai-report-technical');
+      technical.append(node('summary', '', 'Technical details'));
+      const values = node('div', 'nearai-report-stack');
+      const hashes = /([a-f0-9]{64}):([a-f0-9]{64})$/i.exec(
+        signature.signedText,
+      );
+      copyValue(values, 'Request hash (SHA-256)', hashes?.[1]);
+      copyValue(values, 'Response hash (SHA-256)', hashes?.[2]);
+      for (const report of responseHardware) {
+        const evidence = node('div', 'nearai-report-stack');
+        evidence.append(node('h4', '', 'Response signing key attestation'));
+        attestationPane(evidence, report);
+        values.append(evidence);
+      }
+      technical.append(values);
+      body.append(technical);
+      card.append(cardHeading, body);
+      section.append(card);
+      summary.append(section);
+    }
+    root.append(summary);
+    if (!models.length && !gateways.length && !options.onReverify) return;
+    const hardware = node('section', 'nearai-report-card nearai-report-stack');
+    hardware.dataset.field = 'hardware-section';
+    hardware.append(node('h3', '', 'Hardware verification'));
+    if (model) {
+      const identity = node('div', 'nearai-report-model');
+      identity.append(
+        node('span', 'nearai-report-label', 'Model'),
+        node('div', '', model),
+      );
+      hardware.append(identity);
+    }
+    const renderGroup = (parent: HTMLElement, group: VerificationReport[]) => {
+      group.forEach((report, index) => {
+        if (group.length > 1)
+          parent.append(
+            node(
+              'h4',
+              '',
+              `${report.scope === 'gateway' ? 'Gateway report' : 'Model replica'} ${index + 1}`,
+            ),
+          );
+        attestationPane(parent, report);
+      });
+    };
+    if (models.length && gateways.length) {
+      const tabs = node('div', 'nearai-report-tabs');
+      tabs.setAttribute('role', 'tablist');
+      tabs.setAttribute('aria-label', 'Hardware verification');
+      const panels = [
+        node('div', 'nearai-report-stack'),
+        node('div', 'nearai-report-stack'),
+      ];
+      const buttons = ['Model Verification', 'Gateway Verification'].map(
+        (name, index) => {
+          const button = node('button', 'nearai-report-tab', name);
+          button.type = 'button';
+          button.id = `${id}-tab-${index}`;
+          button.setAttribute('role', 'tab');
+          button.setAttribute('aria-controls', `${id}-panel-${index}`);
+          panels[index].id = `${id}-panel-${index}`;
+          panels[index].setAttribute('role', 'tabpanel');
+          panels[index].setAttribute('aria-labelledby', button.id);
+          panels[index].tabIndex = 0;
+          tabs.append(button);
+          return button;
+        },
+      );
+      function select(index: number) {
+        buttons.forEach((button, position) => {
+          button.setAttribute('aria-selected', String(index === position));
+          button.tabIndex = index === position ? 0 : -1;
+          panels[position].hidden = index !== position;
+        });
+      }
+      buttons.forEach((button, index) => {
+        button.addEventListener('click', () => select(index), {
+          signal: events.signal,
+        });
+        button.addEventListener(
+          'keydown',
+          (event) => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key))
+              return;
+            event.preventDefault();
+            const next =
+              event.key === 'Home' ? 0 : event.key === 'End' ? 1 : 1 - index;
+            select(next);
+            buttons[next].focus();
+          },
+          { signal: events.signal },
         );
       });
+      renderGroup(panels[0], models);
+      renderGroup(panels[1], gateways);
+      select(models.some(hasVerifiedAttestation) ? 0 : 1);
+      hardware.append(tabs, ...panels);
+    } else renderGroup(hardware, models.length ? models : gateways);
+    if (options.onReverify) {
+      const retry = node('button', 'nearai-report-reverify', 'Verify Again');
+      retry.type = 'button';
+      retry.prepend(createIcon('refresh'));
+      retry.disabled = !reports.length;
+      retry.addEventListener('click', options.onReverify, {
+        signal: events.signal,
+      });
+      hardware.append(retry);
     }
-    select(
-      modelReports.some((report) => report.attestation)
-        ? 0
-        : gatewayReports.length
-          ? 1
-          : 0,
-    );
-    hardware.append(tabs, ...panels);
     root.append(hardware);
   }
 
