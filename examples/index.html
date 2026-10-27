@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NEAR AI verification widget example</title>
+    <link rel="stylesheet" href="./example.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Verification widget example</h1>
+        <p>
+          The SDK runs here. Only verification reports are sent to the iframe.
+        </p>
+      </header>
+      <form id="configuration">
+        <details id="settings" class="settings" open>
+          <summary>Configuration</summary>
+          <fieldset id="fields">
+            <label for="viewer-url">Viewer URL</label>
+            <input
+              id="viewer-url"
+              type="url"
+              value="http://127.0.0.1:3011/verify"
+              required
+            />
+            <div class="options">
+              <label><input id="dark-mode" type="checkbox" /> Dark mode</label>
+              <label
+                ><input id="show-header" type="checkbox" /> Show header</label
+              >
+            </div>
+            <label><input id="include-evidence" type="checkbox" /> Include detailed hardware evidence</label>
+            <p class="hint">Shares quotes, event logs and deployment configuration with the viewer. Review before enabling.</p>
+            <h3>SDK for live testing</h3>
+            <label for="api-url">API base URL</label>
+            <input
+              id="api-url"
+              type="url"
+              value="https://cloud-stg-api.near.ai/v1"
+              required
+            />
+            <label for="api-key">API key</label>
+            <input
+              id="api-key"
+              type="password"
+              placeholder="Enter your API key"
+              autocomplete="off"
+              required
+            />
+            <p class="hint">
+              Used by this page's SDK. Never sent to the iframe.
+            </p>
+          </fieldset>
+          <button id="clear" type="button">Clear key and conversation</button>
+        </details>
+        <section class="chat" aria-label="Test conversation">
+          <fieldset id="chat-fields">
+            <div class="model-bar">
+              <label for="model">Model</label>
+              <div class="model-controls">
+                <input
+                  id="model"
+                  type="text"
+                  value="Qwen/Qwen3.6-35B-A3B-FP8"
+                  required
+                />
+                <button id="model-verification" type="button">
+                  Verify model
+                </button>
+              </div>
+              <p class="hint">
+                Inspect Model and Gateway hardware without sending a message.
+              </p>
+            </div>
+          </fieldset>
+          <div class="conversation" aria-label="Latest exchange">
+            <p id="sent-message" aria-label="Your message" hidden></p>
+            <p id="placeholder">
+              Send a message to see its response and verification status.
+            </p>
+            <section id="response-panel" aria-labelledby="response-heading">
+              <div class="response-heading">
+                <h2 id="response-heading" hidden>Response</h2>
+                <span id="response-verification"></span>
+              </div>
+              <p id="response-model" hidden></p>
+              <pre id="reply" hidden></pre>
+            </section>
+          </div>
+          <fieldset id="message-fields" class="composer">
+            <label for="prompt">Message</label>
+            <textarea id="prompt" placeholder="Write a message…"></textarea>
+            <div class="send-row">
+              <p>API usage charges may apply.</p>
+              <button id="send" class="primary" type="submit">
+                Send message
+              </button>
+            </div>
+            <p id="status" role="status">
+              Configure the SDK, then verify the model or send a message.
+            </p>
+          </fieldset>
+        </section>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

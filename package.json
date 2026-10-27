@@ -1,0 +1,73 @@
+{
+  "name": "@nearai/inference-widget",
+  "version": "0.1.0",
+  "description": "Embeddable verification UI for the NEAR AI Inference SDK",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nearai/inference-widget.git"
+  },
+  "homepage": "https://github.com/nearai/inference-widget#readme",
+  "bugs": {
+    "url": "https://github.com/nearai/inference-widget/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol.d.ts",
+      "default": "./dist/protocol.js"
+    },
+    "./styles.css": {
+      "types": "./dist/styles.css.d.ts",
+      "default": "./dist/styles.css"
+    }
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "files": [
+    "dist",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsup --clean && node scripts/copy-styles.mjs",
+    "build:examples": "pnpm build && vite build examples --config examples/vite.config.ts",
+    "preview:examples": "vite preview examples --config examples/vite.config.ts --host 127.0.0.1",
+    "typecheck": "tsc --project tsconfig.json",
+    "typecheck:test": "tsc --project tsconfig.test.json",
+    "test": "jest --runInBand",
+    "test:browser": "pnpm build && playwright test",
+    "dev": "pnpm build && vite examples --config examples/vite.config.ts --host 127.0.0.1",
+    "format": "biome format --write .",
+    "format:check": "biome check --formatter-enabled=true --linter-enabled=false --assist-enabled=false .",
+    "lint": "biome lint .",
+    "check": "pnpm format:check && pnpm lint && pnpm build && pnpm typecheck && pnpm typecheck:test && pnpm test",
+    "prepack": "pnpm build"
+  },
+  "peerDependencies": {
+    "@nearai/inference-sdk": "~0.1.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@nearai/inference-sdk": "0.1.0",
+    "@playwright/test": "^1.56.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.13.6",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.12",
+    "tsup": "^8.5.1",
+    "typescript": "^6.0.3",
+    "vite": "^7.1.0"
+  }
+}

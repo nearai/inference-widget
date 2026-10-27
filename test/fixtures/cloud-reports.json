@@ -1,0 +1,36 @@
+[
+  {
+    "schemaVersion": 1,
+    "kind": "reply",
+    "scope": "model",
+    "status": "verified",
+    "model": "example-model",
+    "completionId": "sample-completion",
+    "signature": {
+      "kind": "provider_tee",
+      "signer": {
+        "signingAlgo": "ed25519",
+        "signingAddress": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "signedText": "example-model:2222222222222222222222222222222222222222222222222222222222222222:3333333333333333333333333333333333333333333333333333333333333333",
+      "signature": "44444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444444"
+    },
+    "attestation": {
+      "signer": {
+        "signingAlgo": "ed25519",
+        "signingAddress": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "tcbStatus": "UpToDate",
+      "advisoryIds": [],
+      "deployment": {
+        "appCompose": "{\"services\":{\"inference\":{\"image\":\"example.invalid/sample\"}}}",
+        "runtimeMeasurements": {
+          "osImageHash": "5555555555555555555555555555555555555555555555555555555555555555",
+          "composeHash": "6666666666666666666666666666666666666666666666666666666666666666"
+        }
+      },
+      "deploymentProvenance": "not_checked",
+      "gpuEvidence": "verified"
+    }
+  }
+]
