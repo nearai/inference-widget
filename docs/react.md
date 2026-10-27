@@ -105,12 +105,13 @@ import {
   type VerificationReportView,
 } from '@nearai/inference-widget';
 
-export function VerificationReports({ reports, onReverify, theme = 'light', sourceOrigin, modelLabel }: {
+export function VerificationReports({ reports, onReverify, theme = 'light', sourceOrigin, modelLabel, modelIcons }: {
   reports: readonly VerificationReport[];
   onReverify?: () => void;
   theme?: 'light' | 'dark';
   sourceOrigin?: string;
   modelLabel?: string;
+  modelIcons?: Readonly<Record<string, string>>;
 }) {
   const host = useRef<HTMLDivElement>(null);
   const instance = useRef<VerificationReportView | null>(null);
@@ -118,22 +119,25 @@ export function VerificationReports({ reports, onReverify, theme = 'light', sour
   useEffect(() => {
     if (!host.current) return;
     const view = createVerificationReportView({
-      container: host.current, onReverify, theme, sourceOrigin, modelLabel,
+      container: host.current, onReverify, theme, sourceOrigin, modelLabel, modelIcons,
     });
     instance.current = view;
     return () => {
       view.destroy();
       instance.current = null;
     };
-  }, [onReverify, theme, sourceOrigin, modelLabel]);
+  }, [onReverify, theme, sourceOrigin, modelLabel, modelIcons]);
 
   useEffect(() => {
     instance.current?.setReports(reports);
-  }, [reports, onReverify, theme, sourceOrigin, modelLabel]);
+  }, [reports, onReverify, theme, sourceOrigin, modelLabel, modelIcons]);
 
   return <div ref={host} />;
 }
 ```
+
+Pass a stable optional `modelIcons` map from your existing catalog for model
+artwork; missing or unavailable icons use the bundled fallback.
 
 For a standalone verification page, call `verifyModelReports()` from your
 existing load/retry handler and pass its returned array to

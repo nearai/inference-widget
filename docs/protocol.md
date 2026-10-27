@@ -128,6 +128,10 @@ const connection = connectVerificationFrame({
 // connection.destroy() on teardown.
 ```
 
+Set the viewer document’s referrer policy to `no-referrer` (HTTP header or
+`<meta name="referrer" content="no-referrer">`). The frame helper also sets
+`iframe.referrerPolicy` before navigation.
+
 The viewer must allow intended hosts through HTTP `frame-ancestors` as well.
 The provided helper rejects standalone use and untrusted origins. No legacy
 messages or alternate document/result envelopes are accepted.

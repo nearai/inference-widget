@@ -275,6 +275,7 @@ export function createVerificationFrame(
       String(Boolean(options.getReports)),
     );
     options.onStateChange?.('loading');
+    options.iframe.referrerPolicy = 'no-referrer';
     options.iframe.src = source.href;
     timer = setTimeout(
       () =>

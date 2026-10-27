@@ -1,15 +1,15 @@
 import {
   createVerificationFrame,
-  verificationFrameUrl,
   type VerificationFrame,
   type VerificationRequestContext,
+  verificationFrameUrl,
 } from './frame';
 import { createIcon } from './icons';
 import { verificationPresentation } from './presentation';
 import {
   parseVerificationReports,
-  verificationStatus,
   type VerificationReport,
+  verificationStatus,
 } from './report';
 import {
   reportFromError,
@@ -170,7 +170,11 @@ export function createVerificationWidget(
         options.target?.kind === 'model' ? 'Verify model' : 'Verify response',
       pending: 'Verifying',
       verified: 'Verified',
-      partial: gatewayOnly ? 'Gateway verified' : 'Partially verified',
+      partial: gatewayOnly
+        ? options.target?.kind === 'reply'
+          ? 'Verified'
+          : 'Gateway verified'
+        : 'Partially verified',
       failed: 'Verification failed',
       unverifiable: 'Unable to verify',
     };
@@ -182,6 +186,9 @@ export function createVerificationWidget(
           : state === 'failed' || state === 'partial'
             ? 'alert'
             : 'shield';
+    button.title = gatewayOnly
+      ? 'Gateway verified; model execution is not attested.'
+      : '';
     button.dataset.status = state;
     button.dataset.scope = gatewayOnly ? 'gateway' : 'model';
     button.replaceChildren(

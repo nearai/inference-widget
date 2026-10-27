@@ -173,8 +173,9 @@ Response cards start collapsed; hashes and response-bound Gateway attestation
 are under Technical details. A single hardware scope is shown directly. With
 both scopes, Model opens when verified model evidence is present; otherwise
 Gateway opens. Gateway-only results use a green Gateway verified heading while
-remaining `partial`; they do not attest model execution. Missing verification
-times are hidden. The packaged view keeps deployment approval explicit as
+remaining `partial`; they do not attest model execution. The Response button
+uses the short label Verified for both successful scopes; its tooltip and report
+retain the Gateway-only scope. Missing verification times are hidden. The packaged view keeps deployment approval explicit as
 Approval not checked when no approval policy was checked.
 
 For an inline report view:
@@ -185,16 +186,24 @@ const view = createVerificationReportView({
   container, onReverify: refresh,
   // Optional display context; never overrides a model bound by a signature.
   modelLabel: model,
+  // Optional artwork from your existing catalog, keyed by model ID.
+  modelIcons: { [model]: modelIconUrl },
 });
 view.setReports(reports);
 // view.clear();
 // view.destroy();
 ```
 
+The packaged view includes NEAR AI branding and a default model icon. Optional
+`modelIcons` URLs are display context only; invalid or unavailable artwork falls
+back to the default icon. Images load without a referrer. The renderer does not
+query a model catalog; the hosted Cloud UI Viewer handles its own catalog lookup.
+
 To self-host a viewer, use the renderer with `connectVerificationFrame()` from
 `@nearai/inference-widget/protocol`; [examples/embed.ts](examples/embed.ts) shows
 that optional setup. Configure its allowed parent origins and HTTP
-`frame-ancestors` policy. Include the packaged stylesheet in self-hosted viewers.
+`frame-ancestors` policy. Include the packaged stylesheet and set
+`<meta name="referrer" content="no-referrer">` in self-hosted viewers.
 
 ## Reports and privacy
 

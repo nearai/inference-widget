@@ -12,6 +12,7 @@ export type VerificationReportViewOptions = {
   theme?: 'light' | 'dark';
   sourceOrigin?: string;
   modelLabel?: string;
+  modelIcons?: Readonly<Record<string, string>>;
   onReverify?: () => void;
 };
 
@@ -25,6 +26,9 @@ export type VerificationReportView = {
 const logos = {
   intel: new URL('./logos/intel.svg', import.meta.url).href,
   nvidia: new URL('./logos/nvidia.svg', import.meta.url).href,
+  nearai: new URL('./logos/nearai.svg', import.meta.url).href,
+  nearaiWhite: new URL('./logos/nearai-white.svg', import.meta.url).href,
+  model: new URL('./logos/model.svg', import.meta.url).href,
 };
 let nextViewId = 0;
 
@@ -63,6 +67,55 @@ export function createVerificationReportView(
     image.src = logos[name];
     image.alt = name === 'intel' ? 'Intel' : 'NVIDIA';
     return image;
+  }
+
+  function modelIcon(model: string) {
+    const tile = node('span', 'nearai-report-model-icon');
+    tile.setAttribute('aria-hidden', 'true');
+    const fallback = node('img');
+    fallback.src = logos.model;
+    fallback.alt = '';
+    tile.append(fallback);
+    const supplied = Object.hasOwn(options.modelIcons ?? {}, model)
+      ? options.modelIcons?.[model]
+      : undefined;
+    const value = typeof supplied === 'string' ? supplied.trim() : undefined;
+    if (value) {
+      try {
+        const url = new URL(value, document.baseURI);
+        if (
+          !['https:', 'http:'].includes(url.protocol) ||
+          url.username ||
+          url.password
+        )
+          return tile;
+        const image = node('img');
+        image.alt = '';
+        image.referrerPolicy = 'no-referrer';
+        image.hidden = true;
+        image.addEventListener(
+          'load',
+          () => {
+            fallback.hidden = true;
+            image.hidden = false;
+          },
+          { signal: events.signal },
+        );
+        image.addEventListener(
+          'error',
+          () => {
+            fallback.hidden = false;
+            image.hidden = true;
+          },
+          { signal: events.signal },
+        );
+        image.src = url.href;
+        tile.append(image);
+      } catch {
+        // Invalid or unavailable artwork retains the default model symbol.
+      }
+    }
+    return tile;
   }
 
   function copyValue(parent: HTMLElement, label: string, value?: string) {
@@ -330,6 +383,11 @@ export function createVerificationReportView(
               : 'shield',
       ),
     );
+    const brand = node('img', 'nearai-report-brand');
+    brand.src = options.theme === 'dark' ? logos.nearaiWhite : logos.nearai;
+    brand.alt = '';
+    brand.setAttribute('aria-hidden', 'true');
+    title.append(brand);
     header.append(
       title,
       node(
@@ -476,10 +534,12 @@ export function createVerificationReportView(
     hardware.append(node('h3', '', 'Hardware verification'));
     if (model) {
       const identity = node('div', 'nearai-report-model');
-      identity.append(
+      const label = node('div', 'nearai-report-model-label');
+      label.append(
         node('span', 'nearai-report-label', 'Model'),
         node('div', '', model),
       );
+      identity.append(modelIcon(model), label);
       hardware.append(identity);
     }
     const renderGroup = (parent: HTMLElement, group: VerificationReport[]) => {

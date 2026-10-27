@@ -19,6 +19,17 @@ test('production example initializes and renders through the production viewer',
   await expect(viewer.locator('[data-field="status"]')).toHaveText(
     'Unable to verify',
   );
+  await expect
+    .poll(() =>
+      viewer
+        .locator('.nearai-report-brand')
+        .evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  await expect(viewer.locator('meta[name="referrer"]')).toHaveAttribute(
+    'content',
+    'no-referrer',
+  );
   await viewer
     .getByRole('button', { name: 'Verify Again', exact: true })
     .click();

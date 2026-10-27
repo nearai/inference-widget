@@ -391,6 +391,7 @@
 }
 .nearai-report-title {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 20px;
@@ -420,6 +421,12 @@
   font-size: 12px;
 }
 .nearai-report-model {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--nearai-border);
+  border-radius: 12px;
   font:
     500 14px / 1.6 ui-monospace,
     monospace;
@@ -705,4 +712,34 @@
   .nearai-report-title,
 .nearai-verification-report[data-theme="dark"] .nearai-report-positive {
   color: #6ee7b7;
+}
+
+.nearai-report-brand {
+  width: 84px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.nearai-report-model-label {
+  min-width: 0;
+}
+.nearai-report-model-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--nearai-muted);
+}
+.nearai-report-model-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.nearai-verification-report[data-theme="dark"] .nearai-report-model-icon {
+  background: white;
+  padding: 2px;
+  box-sizing: border-box;
 }
